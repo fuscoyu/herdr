@@ -80,7 +80,7 @@ herdr --machine "Build machine" worktree create --cwd /srv/project --branch revi
 
 The selector must match an enabled saved profile ID or a unique, case-sensitive label, not an arbitrary SSH hostname. The saved remote session is used; combining `--machine` with `--session` or `--remote` is an error. Without the prefix, commands retain their existing local session/socket behavior.
 
-Supported commands are `workspace`, `worktree`, `tab`, `pane`, `notification`, `agent` (except `attach` and local `explain --file`), `api snapshot`, `status server`, and API-backed plugin commands (`link`, `unlink`, `enable`, `disable`, `list`, `action`, `log`, `pane`). Server commands support `stop`, `reload-config`, `agent-manifests`, and `reload-agent-manifests`. Local installation/configuration commands, plugin installation, session management, and interactive terminal attachment are not forwarded.
+Supported commands are `workspace`, `worktree`, `group`, `tab`, `pane`, `notification`, `agent` (except `attach` and local `explain --file`), `api snapshot`, `status server`, and API-backed plugin commands (`link`, `unlink`, `enable`, `disable`, `list`, `action`, `log`, `pane`). Server commands support `stop`, `reload-config`, `agent-manifests`, and `reload-agent-manifests`. Local installation/configuration commands, plugin installation, session management, and interactive terminal attachment are not forwarded.
 
 Requests and responses travel through the JSON API over non-interactive SSH; API payloads are not interpolated into the SSH shell command. No open TUI is required, and the bridge never installs, starts, or restarts a server. Update the local CLI and remote Herdr installation to support machine forwarding, and keep the running remote server's API protocol compatible. Authentication, unavailable machines, and incompatible versions fail without falling back to Local. Requests are not automatically retried after connection failure.
 
@@ -171,6 +171,25 @@ herdr workspace create --cwd ~/project --label api --no-focus
 ```
 
 A workspace is a top-level project or work context. Creating one also creates its first tab and root pane. The JSON response exposes their IDs as `.result.workspace.workspace_id`, `.result.tab.tab_id`, and `.result.root_pane.pane_id`.
+
+## Task groups
+
+```bash
+herdr group list
+herdr group create "Release rollout" [--workspace WORKSPACE_ID]
+herdr group rename <group_id> <label>
+herdr group add <group_id> <workspace_id>
+herdr group remove <workspace_id>
+herdr group delete <group_id>
+```
+
+Task groups collect existing workspaces under a named task, including workspaces from different repositories. Group IDs are stable and scoped to one server session. `create` and `rename` return the group at `.result.group`; `list` returns `.result.groups`, including each group's `workspace_ids`.
+
+A workspace belongs to at most one task group. `add` moves that workspace from its previous group; `remove` leaves it ungrouped. Deleting a group only removes the grouping: it does not close workspaces or terminals, remove worktrees, or delete branches. Empty groups and membership are saved with the session. This is workspace organization, not filesystem or process isolation; use Git worktrees when tasks need isolated checkouts.
+
+Labels must contain 1–128 characters after trimming and cannot contain control characters. Quote labels containing spaces when creating a group. Use `herdr --machine <label-or-id> group ...` to manage groups on a saved SSH machine.
+
+In the sidebar, right-click a workspace and choose **New task group** to create a group containing only that workspace. Use **Move to task group** or **Remove from task group** to change its membership. Right-click an empty area of the spaces list to create an empty group. Click a group header to collapse or expand it; right-click its header to rename or delete the group while keeping its workspaces. Assigned workspaces are grouped by task independently, even when they share a repository. Unassigned workspaces retain the existing repository grouping.
 
 ## Worktrees
 

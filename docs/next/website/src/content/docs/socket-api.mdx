@@ -101,6 +101,7 @@ Raw socket method names use dot notation:
 | Client | `client.window_title.set`, `client.window_title.clear` |
 | Session | `session.snapshot` |
 | Workspace | `workspace.create`, `workspace.list`, `workspace.get`, `workspace.focus`, `workspace.rename`, `workspace.move`, `workspace.move_block`, `workspace.report_metadata`, `workspace.close` |
+| Task group | `task_group.list`, `task_group.create`, `task_group.rename`, `task_group.delete`, `task_group.assign` |
 | Worktree | `worktree.list`, `worktree.create`, `worktree.open`, `worktree.remove` |
 | Tab | `tab.create`, `tab.list`, `tab.get`, `tab.focus`, `tab.rename`, `tab.move`, `tab.close` |
 | Pane | `pane.split`, `pane.swap`, `pane.move`, `pane.zoom`, `pane.layout`, `pane.process_info`, `pane.neighbor`, `pane.edges`, `pane.focus_direction`, `pane.resize`, `pane.list`, `pane.current`, `pane.get`, `pane.rename`, `pane.send_text`, `pane.send_keys`, `pane.send_input`, `pane.read`, `pane.report_agent`, `pane.report_agent_session`, `pane.report_metadata`, `pane.clear_agent_authority`, `pane.release_agent`, `pane.close`, `pane.wait_for_output` |
@@ -110,6 +111,12 @@ Raw socket method names use dot notation:
 | Events | `events.subscribe`, `events.wait` |
 | Integrations | `integration.install`, `integration.uninstall` |
 | Plugins | `plugin.link`, `plugin.list`, `plugin.unlink`, `plugin.enable`, `plugin.disable`, `plugin.action.list`, `plugin.action.invoke`, `plugin.log.list`, `plugin.pane.open`, `plugin.pane.focus`, `plugin.pane.close` |
+
+`task_group.list` returns `{type: "task_group_list", groups: [...]}`. Each group has `id`, `label`, and `workspace_ids`. `task_group.create` takes `{label, workspace_id?}`; the optional workspace is resolved before creation, so invalid input does not leave an empty group. `task_group.rename` takes `{group_id, label}`. Both return `{type: "task_group_info", group: {...}}`.
+
+`task_group.assign` takes `{workspace_id, group_id}` and moves only that workspace into the selected group. Set `group_id` to `null` or omit it to unassign. Workspace references accept the same stable IDs and numeric aliases as `workspace.get`; stored membership and list results always use stable workspace IDs. `task_group.delete` takes `{group_id}` and deletes only organization, leaving member workspaces, terminals, worktrees, and branches intact. Assignment and deletion return `{type: "ok"}`. Missing groups return `task_group_not_found`; missing workspaces return `workspace_not_found`; invalid labels return `invalid_params`. Labels are trimmed, nonempty, at most 128 characters, and contain no control characters.
+
+Groups persist with their server session, including empty groups. Membership is independent of repository identity and does not provide filesystem isolation. Use `task_group.list` as the authoritative group read; existing `workspace` and `session.snapshot` response shapes remain unchanged.
 
 `agent.wait` is server-owned and event-driven. It pins the resolved pane occupant so a replacement cannot satisfy the wait. `agent.prompt` accepts an optional `wait` object with `until` and `timeout_ms`; this submits the prompt and starts the wait in one request, avoiding a race between separate calls. If the resolved agent is already `blocked`, `agent.prompt` returns `agent_blocked` without sending input or starting the wait.
 

@@ -205,6 +205,10 @@ mod tests {
             "plugin.pane.open",
             "plugin.pane.focus",
             "plugin.pane.close",
+            "task_group.create",
+            "task_group.rename",
+            "task_group.delete",
+            "task_group.assign",
         ]
         .into_iter()
         .collect::<BTreeSet<_>>();

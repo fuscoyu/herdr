@@ -31,6 +31,28 @@ pub const AGENT_VIEW_PROJECTION_CAPABILITY: &str = "agent_view_projection";
 pub const AGENT_VIEW_PROJECTION_KIND: &str = "endpoint.agent-view.v1";
 pub const AGENT_COMPLETIONS_CAPABILITY: &str = "agent_completions";
 pub const AGENT_COMPLETIONS_KIND: &str = "endpoint.agent-completions.v1";
+pub const TASK_GROUPS_CAPABILITY: &str = "task_groups";
+pub const TASK_GROUPS_KIND: &str = "endpoint.task-groups.v1";
+
+/// Optional revision-bound session organization, separate from the frozen snapshot codec.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EndpointTaskGroups {
+    pub boot_id: String,
+    pub revision: u64,
+    #[serde(default)]
+    pub task_groups: Vec<crate::task_groups::TaskGroup>,
+}
+
+pub fn task_groups_message(snapshot: &ClientShellSnapshot) -> serde_json::Result<ServerMessage> {
+    Ok(ServerMessage::EndpointControl {
+        kind: TASK_GROUPS_KIND.into(),
+        data: serde_json::to_string(&EndpointTaskGroups {
+            boot_id: snapshot.boot_id.clone(),
+            revision: snapshot.revision,
+            task_groups: snapshot.task_groups.clone(),
+        })?,
+    })
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EndpointAgentCompletions {
@@ -174,6 +196,7 @@ impl EndpointServerWelcome {
                 HEALTH_CHECK_CAPABILITY.into(),
                 AGENT_VIEW_PROJECTION_CAPABILITY.into(),
                 AGENT_COMPLETIONS_CAPABILITY.into(),
+                TASK_GROUPS_CAPABILITY.into(),
             ],
             error: None,
         }
@@ -242,6 +265,7 @@ mod tests {
             tab_bar_right_separator: String::new(),
             agent_view_label: None,
             agent_order: Vec::new(),
+            task_groups: Vec::new(),
             workspaces: Vec::new(),
             tabs: Vec::new(),
             panes: Vec::new(),
@@ -304,6 +328,56 @@ mod tests {
         assert_eq!(kind, ENDPOINT_SNAPSHOT_KIND);
         let decoded: ClientShellSnapshot = serde_json::from_str(&data).unwrap();
         assert_eq!(decoded, snapshot);
+    }
+
+    #[test]
+    fn task_groups_do_not_change_frozen_snapshot_json_or_binary() {
+        let baseline = snapshot();
+        let mut grouped = baseline.clone();
+        grouped.task_groups.push(crate::task_groups::TaskGroup {
+            id: "group-one".into(),
+            label: "Ship feature".into(),
+            workspace_ids: vec!["workspace-one".into()],
+        });
+        // In-memory equality must still trigger a fresh revision when membership changes.
+        assert_ne!(grouped, baseline);
+        let json = serde_json::to_string(&grouped).unwrap();
+        assert_eq!(json, serde_json::to_string(&baseline).unwrap());
+        assert!(!serde_json::to_value(&grouped)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .contains_key("task_groups"));
+        let decoded: ClientShellSnapshot = serde_json::from_str(&json).unwrap();
+        assert!(decoded.task_groups.is_empty());
+        let binary = bincode::serde::encode_to_vec(&grouped, bincode::config::standard()).unwrap();
+        assert_eq!(
+            binary,
+            bincode::serde::encode_to_vec(&baseline, bincode::config::standard()).unwrap()
+        );
+        let (decoded, consumed): (ClientShellSnapshot, _) =
+            bincode::serde::decode_from_slice(&binary, bincode::config::standard()).unwrap();
+        assert_eq!(decoded, baseline);
+        assert_eq!(consumed, binary.len());
+    }
+
+    #[test]
+    fn task_groups_use_optional_revision_bound_control() {
+        let mut snapshot = snapshot();
+        snapshot.task_groups.push(crate::task_groups::TaskGroup {
+            id: "group-one".into(),
+            label: "Ship feature".into(),
+            workspace_ids: vec!["workspace-one".into()],
+        });
+        let ServerMessage::EndpointControl { kind, data } = task_groups_message(&snapshot).unwrap()
+        else {
+            panic!("task groups should use optional endpoint control");
+        };
+        assert_eq!(kind, TASK_GROUPS_KIND);
+        let decoded: EndpointTaskGroups = serde_json::from_str(&data).unwrap();
+        assert_eq!(decoded.boot_id, snapshot.boot_id);
+        assert_eq!(decoded.revision, snapshot.revision);
+        assert_eq!(decoded.task_groups, snapshot.task_groups);
     }
 
     #[test]
@@ -385,6 +459,7 @@ mod tests {
                 HEALTH_CHECK_CAPABILITY.to_string(),
                 AGENT_VIEW_PROJECTION_CAPABILITY.to_string(),
                 AGENT_COMPLETIONS_CAPABILITY.to_string(),
+                TASK_GROUPS_CAPABILITY.to_string(),
             ]
         );
     }

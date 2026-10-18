@@ -38,6 +38,7 @@ pub(super) fn command() -> Command {
         .subcommand(server_command())
         .subcommand(api_command())
         .subcommand(workspace_command())
+        .subcommand(super::group::command())
         .subcommand(worktree_command())
         .subcommand(tab_command())
         .subcommand(notification_command())

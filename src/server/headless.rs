@@ -2007,6 +2007,17 @@ impl HeadlessServer {
                         return false;
                     }
                 };
+                let task_groups_message = if seed_snapshot.task_groups.is_empty() {
+                    None
+                } else {
+                    match crate::protocol::endpoint::task_groups_message(&seed_snapshot) {
+                        Ok(message) => Some(message),
+                        Err(err) => {
+                            warn!(client_id, err = %err, "failed to encode endpoint task groups");
+                            return false;
+                        }
+                    }
+                };
                 connection.shell_location = Some(location);
                 connection.shell_snapshot = Some(seed_snapshot);
                 connection.shell_agent_completions = Some(completion_projection);
@@ -2016,6 +2027,9 @@ impl HeadlessServer {
                     self.popup_owner_tab_id = self.shell_tab_id_for_client(client_id);
                 }
                 if let Some(message) = projection_message {
+                    self.send_to_client(client_id, message);
+                }
+                if let Some(message) = task_groups_message {
                     self.send_to_client(client_id, message);
                 }
                 self.send_to_client(client_id, completion_message);

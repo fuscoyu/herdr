@@ -691,6 +691,7 @@ impl AppState {
         for idx in close_indices.iter().rev() {
             self.workspaces.remove(*idx);
         }
+        self.reconcile_task_groups();
         self.remove_unattached_terminal_ids(terminal_ids);
         if self.workspaces.is_empty() {
             self.active = None;
@@ -884,6 +885,15 @@ impl AppState {
 
     pub(crate) fn workspace_close_indices(&self, ws_idx: usize) -> Vec<usize> {
         let group = self.workspace_group_close_indices(ws_idx);
+        // A task boundary disables implicit repository-wide closure. Keep the
+        // explicit Git-group API separate from the ordinary Close action.
+        if group.iter().any(|index| {
+            self.workspaces
+                .get(*index)
+                .is_some_and(|workspace| self.workspace_task_group(&workspace.id).is_some())
+        }) {
+            return vec![ws_idx];
+        }
         if group.iter().any(|index| {
             *index != ws_idx
                 && self.workspaces[*index]
@@ -2087,6 +2097,7 @@ impl AppState {
                 .map(|ws| ws.id.clone());
             let selected_workspace_id = self.workspaces.get(self.selected).map(|ws| ws.id.clone());
             self.workspaces.remove(ws_idx);
+            self.reconcile_task_groups();
             self.remove_unattached_terminal_ids(workspace_terminal_ids);
             if self.workspaces.is_empty() {
                 self.active = None;

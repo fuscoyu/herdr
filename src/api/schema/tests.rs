@@ -1465,3 +1465,55 @@ fn read_choices_cover_every_api_value() {
     crate::cli::projection::assert_choices_cover_api_enum(READ_SOURCES);
     crate::cli::projection::assert_choices_cover_api_enum(READ_FORMATS);
 }
+
+#[test]
+fn task_group_request_shapes_are_additive_and_round_trip() {
+    for (method, params) in [
+        ("task_group.list", serde_json::json!({})),
+        ("task_group.create", serde_json::json!({"label":"Release"})),
+        (
+            "task_group.create",
+            serde_json::json!({"label":"Release","workspace_id":"w1"}),
+        ),
+        (
+            "task_group.rename",
+            serde_json::json!({"group_id":"g1","label":"Review"}),
+        ),
+        ("task_group.delete", serde_json::json!({"group_id":"g1"})),
+        (
+            "task_group.assign",
+            serde_json::json!({"workspace_id":"w1","group_id":"g1"}),
+        ),
+        (
+            "task_group.assign",
+            serde_json::json!({"workspace_id":"w1","group_id":null}),
+        ),
+    ] {
+        let json = serde_json::json!({"id":"group-test", "method":method, "params":params});
+        let request: Request = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(request).unwrap(), json);
+    }
+    let request: Request = serde_json::from_value(serde_json::json!({
+        "id":"unassign", "method":"task_group.assign", "params":{"workspace_id":"w1"},
+    }))
+    .unwrap();
+    assert!(matches!(
+        request.method,
+        Method::TaskGroupAssign(TaskGroupAssignParams { group_id: None, .. })
+    ));
+    for (method, params) in [
+        ("task_group.create", serde_json::json!({})),
+        ("task_group.rename", serde_json::json!({"group_id":"g1"})),
+        ("task_group.delete", serde_json::json!({})),
+        ("task_group.assign", serde_json::json!({"group_id":"g1"})),
+        (
+            "task_group.assign",
+            serde_json::json!({"workspace_id":"w1","group_id":1}),
+        ),
+    ] {
+        assert!(serde_json::from_value::<Request>(serde_json::json!({
+            "id":"invalid", "method":method, "params":params,
+        }))
+        .is_err());
+    }
+}

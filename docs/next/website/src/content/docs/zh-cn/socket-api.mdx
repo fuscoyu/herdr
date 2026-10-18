@@ -97,6 +97,7 @@ herdr pane read w1:p2 --source recent --lines 50
 | 客户端 | `client.window_title.set`、`client.window_title.clear` |
 | 会话 | `session.snapshot` |
 | 工作区 | `workspace.create`、`workspace.list`、`workspace.get`、`workspace.focus`、`workspace.rename`、`workspace.move`、`workspace.move_block`、`workspace.report_metadata`、`workspace.close` |
+| 任务组 | `task_group.list`, `task_group.create`, `task_group.rename`, `task_group.delete`, `task_group.assign` |
 | Worktree | `worktree.list`、`worktree.create`、`worktree.open`、`worktree.remove` |
 | 标签页 | `tab.create`、`tab.list`、`tab.get`、`tab.focus`、`tab.rename`、`tab.move`、`tab.close` |
 | 窗格 | `pane.split`、`pane.swap`、`pane.move`、`pane.zoom`、`pane.layout`、`pane.process_info`、`pane.neighbor`、`pane.edges`、`pane.focus_direction`、`pane.resize`、`pane.list`、`pane.current`、`pane.get`、`pane.rename`、`pane.send_text`、`pane.send_keys`、`pane.send_input`、`pane.read`、`pane.report_agent`、`pane.report_agent_session`、`pane.report_metadata`、`pane.clear_agent_authority`、`pane.release_agent`、`pane.close`、`pane.wait_for_output` |
@@ -106,6 +107,12 @@ herdr pane read w1:p2 --source recent --lines 50
 | 事件 | `events.subscribe`、`events.wait` |
 | 集成 | `integration.install`、`integration.uninstall` |
 | 插件 | `plugin.link`、`plugin.list`、`plugin.unlink`、`plugin.enable`、`plugin.disable`、`plugin.action.list`、`plugin.action.invoke`、`plugin.log.list`、`plugin.pane.open`、`plugin.pane.focus`、`plugin.pane.close` |
+
+`task_group.list` 返回 `{type: "task_group_list", groups: [...]}`。每个组包含 `id`、`label` 和 `workspace_ids`。`task_group.create` 接收 `{label, workspace_id?}`，会在创建前验证可选的工作区，因此无效输入不会留下空组。`task_group.rename` 接收 `{group_id, label}`。两者均返回 `{type: "task_group_info", group: {...}}`。
+
+`task_group.assign` 接收 `{workspace_id, group_id}`，只将指定工作区移入选定的组。将 `group_id` 设为 `null` 或省略该字段可解除分组。工作区可使用与 `workspace.get` 相同的稳定 ID 或数字别名；保存的成员关系和列表结果始终使用稳定工作区 ID。`task_group.delete` 接收 `{group_id}`，只删除分组关系，保留工作区、终端、worktree 和分支。分配和删除返回 `{type: "ok"}`。组不存在时返回 `task_group_not_found`，工作区不存在时返回 `workspace_not_found`，标签无效时返回 `invalid_params`。标签会去除首尾空白，必须为 1–128 个字符，且不能包含控制字符。
+
+空组也会随服务器会话保存。成员关系独立于仓库身份，不提供文件系统隔离。请使用 `task_group.list` 获取权威的组信息；现有 `workspace` 和 `session.snapshot` 响应格式保持不变。
 
 `agent.wait` 由服务器拥有并由事件驱动。它会固定到已解析的窗格占用者,因此替换后的智能体不能满足该等待。`agent.prompt` 接受可选的 `wait` 对象,其中包含 `until` 和 `timeout_ms`;这样可在一个请求中提交提示并开始等待,避免两个独立调用之间的竞态。如果解析出的智能体已经是 `blocked`,`agent.prompt` 不会发送输入或开始等待,而是返回 `agent_blocked`。
 

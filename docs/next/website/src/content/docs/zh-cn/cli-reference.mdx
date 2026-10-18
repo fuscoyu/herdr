@@ -78,7 +78,7 @@ herdr --machine "Build machine" worktree create --cwd /srv/project --branch revi
 
 选择器必须是已启用的配置 ID 或唯一标签（区分大小写），不能是任意 SSH 主机名。命令使用保存的远程会话，不能与 `--session` 或 `--remote` 混用。省略前缀时，本地行为保持不变。
 
-支持 `workspace`、`worktree`、`tab`、`pane`、`notification`、`agent`（不含 `attach` 和本地 `explain --file`）、`api snapshot`、`status server`，以及基于 API 的插件操作（`link`、`unlink`、`enable`、`disable`、`list`、`action`、`log`、`pane`）。服务器操作支持 `stop`、`reload-config`、`agent-manifests`、`reload-agent-manifests`。本地安装和配置、插件安装、会话管理及交互式终端连接不会被转发。
+支持 `workspace`、`worktree`、`group`、`tab`、`pane`、`notification`、`agent`（不含 `attach` 和本地 `explain --file`）、`api snapshot`、`status server`，以及基于 API 的插件操作（`link`、`unlink`、`enable`、`disable`、`list`、`action`、`log`、`pane`）。服务器操作支持 `stop`、`reload-config`、`agent-manifests`、`reload-agent-manifests`。本地安装和配置、插件安装、会话管理及交互式终端连接不会被转发。
 
 请求和响应通过非交互式 SSH 传输 JSON API，API 内容不会被拼接到 SSH shell 命令中。不需要打开 TUI，也不会自动安装、启动或重启服务器。请更新本地 CLI 和远程 Herdr，并确保运行中的服务器 API 协议兼容。认证、连接或版本错误不会回退到 Local，连接失败后也不会自动重试请求。
 
@@ -167,6 +167,25 @@ herdr workspace create --cwd ~/project --label api --no-focus
 ```
 
 工作区是顶层项目或工作上下文。创建工作区也会创建第一个标签页和根窗格。JSON 响应中的 `.result.workspace.workspace_id`、`.result.tab.tab_id` 和 `.result.root_pane.pane_id` 是对应 ID。
+
+## 任务组
+
+```bash
+herdr group list
+herdr group create "Release rollout" [--workspace WORKSPACE_ID]
+herdr group rename <group_id> <label>
+herdr group add <group_id> <workspace_id>
+herdr group remove <workspace_id>
+herdr group delete <group_id>
+```
+
+任务组可将现有工作区归入一个有名称的任务，包括来自不同仓库的工作区。组 ID 保持稳定，作用域为单个服务器会话。`create` 和 `rename` 在 `.result.group` 中返回组，`list` 在 `.result.groups` 中返回所有组及其 `workspace_ids`。
+
+每个工作区最多属于一个任务组。`add` 会把指定工作区从原组移入新组；`remove` 会解除分组。删除组只删除分组关系，不会关闭工作区或终端，也不会删除 worktree 或分支。空组和成员关系随会话保存。任务组不提供文件系统或进程隔离；需要独立检出目录的任务应使用 Git worktree。
+
+标签去除首尾空白后须为 1–128 个字符，且不能含有控制字符。创建组时，包含空格的标签须加引号。使用 `herdr --machine <label-or-id> group ...` 可管理已保存 SSH 机器上的任务组。
+
+在侧边栏中右键点击工作区，选择 **New task group** 可创建一个仅包含该工作区的组。使用 **Move to task group** 或 **Remove from task group** 更改成员关系。右键点击空间列表的空白区域可创建空组。点击组标题可折叠或展开；右键点击组标题可重命名或删除组，同时保留工作区。即使工作区来自同一仓库，也会按各自所属的任务独立分组。未分配的工作区保留原有的仓库分组方式。
 
 ## Worktree
 

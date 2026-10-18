@@ -3020,3 +3020,105 @@ fn navigator_foreign_workspace_heading_keeps_the_workspace_target() {
         }] if activated == &endpoint_id && workspace_id == "ws_1"
     ));
 }
+
+#[test]
+fn task_groups_companion_reaches_active_and_inactive_endpoint_snapshots() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let profile = remote_profile();
+    let remote_id = ClientEndpointId::Ssh(profile.id.clone());
+    state.set_endpoint_catalog(&[profile]);
+    state.set_endpoint_status(&remote_id, ClientEndpointStatus::Online);
+    let groups = vec![crate::task_groups::TaskGroup {
+        id: "group-one".into(),
+        label: "Ship feature".into(),
+        workspace_ids: vec!["ws_1".into()],
+    }];
+    let local = snapshot();
+    assert!(!state.set_endpoint_task_groups(
+        &ClientEndpointId::Local,
+        1,
+        crate::protocol::endpoint::EndpointTaskGroups {
+            boot_id: local.boot_id.clone(),
+            revision: local.revision,
+            task_groups: groups.clone(),
+        },
+    ));
+    state.set_endpoint_snapshot_for_generation(&ClientEndpointId::Local, 1, Box::new(local));
+    assert_eq!(state.snapshot.as_ref().unwrap().task_groups, groups);
+
+    let remote = snapshot();
+    state.cache_endpoint_snapshot_inactive_for_generation(&remote_id, 2, Box::new(remote.clone()));
+    assert!(state.set_endpoint_task_groups(
+        &remote_id,
+        2,
+        crate::protocol::endpoint::EndpointTaskGroups {
+            boot_id: remote.boot_id,
+            revision: remote.revision,
+            task_groups: groups.clone(),
+        },
+    ));
+    assert_eq!(
+        state
+            .endpoints
+            .iter()
+            .find(|endpoint| endpoint.endpoint_id == remote_id)
+            .unwrap()
+            .snapshot
+            .as_ref()
+            .unwrap()
+            .task_groups,
+        groups
+    );
+    assert_eq!(state.active_endpoint_id, ClientEndpointId::Local);
+    state.retire_endpoint(&remote_id);
+    assert!(state
+        .endpoints
+        .iter()
+        .find(|endpoint| endpoint.endpoint_id == remote_id)
+        .unwrap()
+        .snapshot
+        .is_none());
+}
+
+#[test]
+fn late_task_groups_do_not_activate_a_snapshot_waiting_for_its_surface() {
+    let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+    let first = snapshot();
+    let mut next = first.clone();
+    next.revision += 1;
+    state.set_endpoint_snapshot_for_generation(
+        &ClientEndpointId::Local,
+        1,
+        Box::new(first.clone()),
+    );
+    state.cache_endpoint_snapshot_inactive_for_generation(
+        &ClientEndpointId::Local,
+        1,
+        Box::new(next.clone()),
+    );
+    state.set_endpoint_task_groups(
+        &ClientEndpointId::Local,
+        1,
+        crate::protocol::endpoint::EndpointTaskGroups {
+            boot_id: next.boot_id,
+            revision: next.revision,
+            task_groups: vec![crate::task_groups::TaskGroup {
+                id: "group-one".into(),
+                label: "Ship feature".into(),
+                workspace_ids: vec!["ws_1".into()],
+            }],
+        },
+    );
+    let presented = state.snapshot.as_ref().unwrap();
+    assert_eq!(presented.revision, first.revision);
+    assert!(presented.task_groups.is_empty());
+    assert_eq!(
+        state.endpoints[0]
+            .snapshot
+            .as_ref()
+            .unwrap()
+            .task_groups
+            .len(),
+        1
+    );
+}

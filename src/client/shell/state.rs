@@ -85,6 +85,7 @@ pub(super) enum ClientMobileTarget {
 pub(super) struct ShellHitMap {
     pub(super) machines: Vec<MachineHit>,
     pub(super) workspaces: Vec<WorkspaceHit>,
+    pub(super) task_groups: Vec<TaskGroupHit>,
     pub(super) workspace_body: Rect,
     pub(super) workspace_scrollbar: Rect,
     pub(super) workspace_scroll_metrics: Option<crate::pane::ScrollMetrics>,
@@ -231,6 +232,12 @@ pub(super) enum ClientChromeDrag {
     },
 }
 
+pub(super) struct TaskGroupHit {
+    pub(super) rect: Rect,
+    pub(super) endpoint_id: ClientEndpointId,
+    pub(super) group_id: String,
+}
+
 pub(super) struct WorkspaceHit {
     pub(super) rect: Rect,
     pub(super) endpoint_id: ClientEndpointId,
@@ -295,6 +302,12 @@ pub(super) enum ClientShellOverlayKind {
 
 #[derive(Debug)]
 pub(super) enum ClientRenameTarget {
+    NewTaskGroup {
+        workspace_id: Option<String>,
+    },
+    TaskGroup {
+        group_id: String,
+    },
     NewWorkspace {
         source_workspace_id: Option<String>,
         cwd: Option<String>,
@@ -516,6 +529,11 @@ pub(super) enum ClientContextMenuAction {
     OpenWorktree,
     RemoveWorktree,
     ToggleGroup,
+    NewTaskGroup,
+    ChooseTaskGroup,
+    AssignTaskGroup(usize),
+    RemoveFromTaskGroup,
+    DeleteTaskGroup,
     NewTab,
     RenamePane,
     ClearPaneName,
@@ -529,11 +547,26 @@ pub(super) enum ClientContextMenuAction {
 
 #[derive(Debug)]
 pub(super) enum ClientContextMenuTarget {
+    TaskGroups,
+    TaskGroup {
+        group_id: String,
+        collapsed: bool,
+        can_rename: bool,
+        can_delete: bool,
+    },
+    TaskGroupPicker {
+        workspace_id: String,
+        groups: Vec<crate::task_groups::TaskGroup>,
+    },
     Workspace {
         workspace_id: String,
         is_git: bool,
         is_linked_worktree: bool,
         has_worktree_children: bool,
+        can_create_task_group: bool,
+        can_assign_task_group: bool,
+        has_task_groups: bool,
+        assigned_task_group: bool,
         close_group: bool,
         collapsed: bool,
     },
@@ -559,7 +592,7 @@ pub(super) struct ClientContextMenuOverlay {
 }
 
 pub(super) struct ClientContextMenuItem {
-    pub(super) label: &'static str,
+    pub(super) label: String,
     pub(super) action: ClientContextMenuAction,
 }
 
@@ -990,6 +1023,7 @@ pub(super) struct WorkspaceEntry {
     pub(super) index: usize,
     pub(super) indented: bool,
     pub(super) last_child: bool,
+    pub(super) task_group: bool,
 }
 
 impl ClientShellState {
@@ -1209,9 +1243,12 @@ impl ClientShellState {
             return;
         }
         let target = self.snapshot.as_deref().and_then(|snapshot| {
-            self.navigation_workspace_entries(snapshot)
-                .iter()
-                .position(|entry| snapshot.workspaces[entry.index].workspace_id == workspace_id)
+            let empty = HashSet::new();
+            let collapsed = self.collapsed_groups_for_endpoint(&self.active_endpoint_id).unwrap_or(&empty);
+            sidebar::sidebar_entries(snapshot, collapsed).iter().position(|row| {
+                matches!(row, sidebar::SidebarEntry::Workspace(entry)
+                    if snapshot.workspaces.get(entry.index).is_some_and(|workspace| workspace.workspace_id == workspace_id))
+            })
         });
         if let Some(target) = target {
             self.workspace_scroll = target.min(self.hits.workspace_max_scroll);

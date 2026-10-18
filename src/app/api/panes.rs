@@ -1283,6 +1283,8 @@ impl App {
         };
 
         self.state.remove_alias_shadowed_by_new_pane(moved_pane_id);
+        // Defer pruning until the move succeeds so recovery can keep the source membership.
+        self.state.reconcile_task_groups();
         self.state.mark_session_dirty();
         self.schedule_session_save();
         let Some(pane) = self.pane_info(target_ws_idx, moved_pane_id) else {
@@ -3620,6 +3622,10 @@ mod tests {
         seed_terminal_states(&mut app);
         let source_public = app.public_pane_id(0, source).unwrap();
         let source_workspace = app.public_workspace_id(0);
+        let task = app.state.create_task_group("Task".into()).unwrap();
+        app.state
+            .assign_workspace_task_group(&source_workspace, Some(&task.id))
+            .unwrap();
 
         let response = app.handle_pane_move(
             "req".into(),
@@ -3639,6 +3645,7 @@ mod tests {
         };
         assert!(move_result.changed);
         assert_eq!(move_result.closed_workspace_id, Some(source_workspace));
+        assert!(app.state.task_groups[0].workspace_ids.is_empty());
         assert_eq!(
             move_result
                 .created_workspace
@@ -3826,6 +3833,10 @@ mod tests {
             .unwrap()
             .clone();
         let previous_workspace_id = app.public_workspace_id(0);
+        let task = app.state.create_task_group("Task".into()).unwrap();
+        app.state
+            .assign_workspace_task_group(&previous_workspace_id, Some(&task.id))
+            .unwrap();
         let context = PaneMoveRecoveryContext {
             source_ws_idx: 0,
             previous_workspace_id: previous_workspace_id.clone(),
@@ -3845,6 +3856,10 @@ mod tests {
 
         assert_eq!(app.state.workspaces.len(), 1);
         assert_eq!(app.state.workspaces[0].id, previous_workspace_id);
+        assert_eq!(
+            app.state.task_groups[0].workspace_ids.as_slice(),
+            std::slice::from_ref(&previous_workspace_id)
+        );
         assert_eq!(
             app.state.workspaces[0].tabs[0].terminal_id(source),
             Some(&source_terminal)

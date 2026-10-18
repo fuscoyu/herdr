@@ -936,6 +936,22 @@ impl ClientShellState {
         };
         let trimmed = rename.input.trim();
         let method = match rename.target {
+            ClientRenameTarget::NewTaskGroup { workspace_id } => (!trimmed.is_empty()).then(|| {
+                crate::api::schema::Method::TaskGroupCreate(
+                    crate::api::schema::TaskGroupCreateParams {
+                        label: trimmed.to_owned(),
+                        workspace_id,
+                    },
+                )
+            }),
+            ClientRenameTarget::TaskGroup { group_id } => (!trimmed.is_empty()).then(|| {
+                crate::api::schema::Method::TaskGroupRename(
+                    crate::api::schema::TaskGroupRenameParams {
+                        group_id,
+                        label: trimmed.to_owned(),
+                    },
+                )
+            }),
             ClientRenameTarget::NewWorkspace {
                 source_workspace_id,
                 cwd,

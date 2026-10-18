@@ -4,8 +4,11 @@ impl ClientContextMenuOverlay {
     pub(super) fn items(&self) -> Vec<ClientContextMenuItem> {
         use ClientContextMenuAction as Action;
 
-        let item = |label, action| ClientContextMenuItem { label, action };
-        match &self.target {
+        let item = |label: &str, action| ClientContextMenuItem {
+            label: label.to_owned(),
+            action,
+        };
+        let mut items = match &self.target {
             ClientContextMenuTarget::Workspace { is_git: false, .. } => {
                 vec![item("Rename", Action::Rename), item("Close", Action::Close)]
             }
@@ -45,6 +48,35 @@ impl ClientContextMenuOverlay {
                     Action::ToggleGroup,
                 ),
             ],
+            ClientContextMenuTarget::TaskGroups => {
+                vec![item("New task group...", Action::NewTaskGroup)]
+            }
+            ClientContextMenuTarget::TaskGroup {
+                collapsed,
+                can_rename,
+                can_delete,
+                ..
+            } => {
+                let mut items = vec![item(
+                    if *collapsed { "Expand" } else { "Collapse" },
+                    Action::ToggleGroup,
+                )];
+                if *can_rename {
+                    items.push(item("Rename task group", Action::Rename));
+                }
+                if *can_delete {
+                    items.push(item(
+                        "Delete group (keep workspaces)",
+                        Action::DeleteTaskGroup,
+                    ));
+                }
+                items
+            }
+            ClientContextMenuTarget::TaskGroupPicker { groups, .. } => groups
+                .iter()
+                .enumerate()
+                .map(|(index, group)| item(&group.label, Action::AssignTaskGroup(index)))
+                .collect(),
             ClientContextMenuTarget::Tab { .. } => vec![
                 item("New tab", Action::NewTab),
                 item("Rename", Action::Rename),
@@ -79,7 +111,26 @@ impl ClientContextMenuOverlay {
                 ]);
                 items
             }
+        };
+        if let ClientContextMenuTarget::Workspace {
+            can_create_task_group,
+            can_assign_task_group,
+            has_task_groups,
+            assigned_task_group,
+            ..
+        } = &self.target
+        {
+            if *can_create_task_group {
+                items.push(item("New task group...", Action::NewTaskGroup));
+            }
+            if *can_assign_task_group && *has_task_groups {
+                items.push(item("Move to task group...", Action::ChooseTaskGroup));
+            }
+            if *can_assign_task_group && *assigned_task_group {
+                items.push(item("Remove from task group", Action::RemoveFromTaskGroup));
+            }
         }
+        items
     }
 }
 
@@ -96,14 +147,38 @@ impl ClientShellState {
             return;
         };
         let worktree = workspace.worktree.as_ref();
-        let has_worktree_children = worktree.is_some_and(|worktree| {
-            !worktree.is_linked_worktree
-                && snapshot.workspaces.iter().any(|candidate| {
-                    candidate.worktree.as_ref().is_some_and(|candidate| {
-                        candidate.key == worktree.key && candidate.is_linked_worktree
+        let assigned_task_group =
+            super::task_groups::workspace_is_assigned(snapshot, &workspace_id);
+        let can_create_task_group =
+            self.supports_endpoint_method(&crate::api::schema::Method::TaskGroupCreate(
+                crate::api::schema::TaskGroupCreateParams {
+                    label: String::new(),
+                    workspace_id: None,
+                },
+            ));
+        let can_assign_task_group =
+            self.supports_endpoint_method(&crate::api::schema::Method::TaskGroupAssign(
+                crate::api::schema::TaskGroupAssignParams {
+                    workspace_id: workspace_id.clone(),
+                    group_id: None,
+                },
+            ));
+        let has_task_groups = snapshot
+            .task_groups
+            .iter()
+            .any(|group| !group.workspace_ids.contains(&workspace_id));
+        let has_worktree_children = !assigned_task_group
+            && worktree.is_some_and(|worktree| {
+                !worktree.is_linked_worktree
+                    && snapshot.workspaces.iter().any(|candidate| {
+                        !super::task_groups::workspace_is_assigned(
+                            snapshot,
+                            &candidate.workspace_id,
+                        ) && candidate.worktree.as_ref().is_some_and(|candidate| {
+                            candidate.key == worktree.key && candidate.is_linked_worktree
+                        })
                     })
-                })
-        });
+            });
         let close_group = super::sidebar::workspace_close_is_group(snapshot, workspace);
         let collapsed = worktree.is_some_and(|worktree| {
             self.group_is_collapsed(&self.active_endpoint_id, &worktree.key)
@@ -114,6 +189,10 @@ impl ClientShellState {
                 is_git: worktree.is_some() || workspace.branch.is_some(),
                 is_linked_worktree: worktree.is_some_and(|worktree| worktree.is_linked_worktree),
                 has_worktree_children,
+                can_create_task_group,
+                can_assign_task_group,
+                has_task_groups,
+                assigned_task_group,
                 close_group,
                 collapsed,
             },
@@ -192,6 +271,20 @@ impl ClientShellState {
             return;
         };
         match menu.target {
+            ClientContextMenuTarget::TaskGroups => self.begin_new_task_group(None),
+            ClientContextMenuTarget::TaskGroup { group_id, .. } => {
+                self.activate_task_group_context_action(group_id, action, outcome)
+            }
+            ClientContextMenuTarget::TaskGroupPicker {
+                workspace_id,
+                groups,
+            } => {
+                if let ClientContextMenuAction::AssignTaskGroup(index) = action {
+                    if let Some(group) = groups.get(index) {
+                        self.assign_task_group(workspace_id, Some(group.id.clone()), outcome);
+                    }
+                }
+            }
             ClientContextMenuTarget::Workspace {
                 workspace_id,
                 close_group,
@@ -229,6 +322,11 @@ impl ClientShellState {
         use crate::input::KeybindAction;
 
         match action {
+            ClientContextMenuAction::NewTaskGroup => self.begin_new_task_group(Some(workspace_id)),
+            ClientContextMenuAction::ChooseTaskGroup => self.choose_task_group(workspace_id),
+            ClientContextMenuAction::RemoveFromTaskGroup => {
+                self.assign_task_group(workspace_id, None, outcome)
+            }
             ClientContextMenuAction::Rename => {
                 let label = self
                     .snapshot

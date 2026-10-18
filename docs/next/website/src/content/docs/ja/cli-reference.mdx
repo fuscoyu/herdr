@@ -78,7 +78,7 @@ herdr --machine "Build machine" worktree create --cwd /srv/project --branch revi
 
 有効なプロファイル ID または一意のラベル（大文字・小文字を区別）を指定します。任意の SSH ホスト名は使えません。保存済みのリモートセッションを使うため、`--session` や `--remote` との併用はエラーです。省略時のローカル動作は変わりません。
 
-対応するのは `workspace`、`worktree`、`tab`、`pane`、`notification`、`agent`（`attach` とローカルの `explain --file` 以外）、`api snapshot`、`status server`、API ベースのプラグイン操作（`link`、`unlink`、`enable`、`disable`、`list`、`action`、`log`、`pane`）です。サーバー操作は `stop`、`reload-config`、`agent-manifests`、`reload-agent-manifests` に対応します。ローカルのインストール・設定、プラグインのインストール、セッション管理、対話的な端末接続は転送しません。
+対応するのは `workspace`、`worktree`、`group`、`tab`、`pane`、`notification`、`agent`（`attach` とローカルの `explain --file` 以外）、`api snapshot`、`status server`、API ベースのプラグイン操作（`link`、`unlink`、`enable`、`disable`、`list`、`action`、`log`、`pane`）です。サーバー操作は `stop`、`reload-config`、`agent-manifests`、`reload-agent-manifests` に対応します。ローカルのインストール・設定、プラグインのインストール、セッション管理、対話的な端末接続は転送しません。
 
 JSON API を非対話 SSH で転送します。API の内容を SSH のシェルコマンドに埋め込むことはありません。開いた TUI は不要で、サーバーのインストール・起動・再起動も自動では行いません。ローカル CLI とリモート Herdr を更新し、実行中サーバーの API プロトコルとの互換性を保ってください。認証、接続、互換性のエラーで Local にフォールバックしたり、要求を自動再送したりすることはありません。
 
@@ -167,6 +167,25 @@ herdr workspace create --cwd ~/project --label api --no-focus
 ```
 
 ワークスペースは最上位のプロジェクトまたは作業コンテキストです。作成時に最初のタブとルートペインも作られます。JSON レスポンスの `.result.workspace.workspace_id`、`.result.tab.tab_id`、`.result.root_pane.pane_id` から各 ID を取得できます。
+
+## タスクグループ
+
+```bash
+herdr group list
+herdr group create "Release rollout" [--workspace WORKSPACE_ID]
+herdr group rename <group_id> <label>
+herdr group add <group_id> <workspace_id>
+herdr group remove <workspace_id>
+herdr group delete <group_id>
+```
+
+タスクグループは、異なるリポジトリを含む既存のワークスペースを、名前付きのタスクにまとめます。グループ ID は安定した値で、1 つのサーバーセッション内で有効です。`create` と `rename` は `.result.group` にグループを返し、`list` は各グループの `workspace_ids` を含む `.result.groups` を返します。
+
+ワークスペースが所属できるタスクグループは 1 つまでです。`add` は指定したワークスペースを以前のグループから移し、`remove` は所属を解除します。グループを削除しても、ワークスペースやターミナルは閉じず、worktree やブランチも削除しません。空のグループと所属情報はセッションに保存されます。ファイルシステムやプロセスは分離されないため、独立したチェックアウトが必要なタスクには Git worktree を使ってください。
+
+ラベルは前後の空白を除いて 1〜128 文字で、制御文字は使用できません。作成時に空白を含むラベルは引用符で囲んでください。保存済み SSH マシン上のグループは `herdr --machine <label-or-id> group ...` で管理できます。
+
+サイドバーでワークスペースを右クリックし、**New task group** を選ぶと、そのワークスペースだけを含むグループを作成します。**Move to task group** または **Remove from task group** で所属を変更できます。スペース一覧の空白部分を右クリックすると空のグループを作成できます。グループの見出しをクリックすると折りたたみ・展開でき、右クリックするとワークスペースを残したまま名前変更・削除できます。同じリポジトリのワークスペースでも、所属先のタスクごとに独立してまとめられます。未所属のワークスペースは従来のリポジトリ単位の表示を維持します。
 
 ## Worktree
 

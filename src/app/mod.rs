@@ -24,6 +24,7 @@ mod runtime;
 mod session;
 pub mod state;
 mod tab_bar_status;
+mod task_groups;
 mod terminal_targets;
 mod terminal_titles;
 mod theme_sync;
@@ -402,6 +403,10 @@ impl App {
         let mut restored_terminals = std::collections::HashMap::new();
         let mut restored_terminal_runtimes = crate::terminal::TerminalRuntimeRegistry::new();
         let snapshot = policy.restore_session.then(crate::persist::load).flatten();
+        let task_groups = snapshot
+            .as_ref()
+            .map(|snap| snap.task_groups.clone())
+            .unwrap_or_default();
         let mut plugin_installation_leases = crate::plugin_installations::Leases::new();
         let mut plugin_installation_cleanup_allowed = true;
         if policy.persist_plugin_registry {
@@ -497,6 +502,7 @@ impl App {
             pane_id_aliases: std::collections::HashMap::new(),
             public_pane_id_aliases: std::collections::HashMap::new(),
             workspaces,
+            task_groups,
             active,
             previous_pane_focus: None,
             selected,
@@ -578,6 +584,7 @@ impl App {
         };
 
         state.terminals = restored_terminals;
+        state.reconcile_task_groups();
 
         // Background auto-update is disabled for non-persistent test apps
         // and in debug/test builds so local development never mutates the
@@ -726,6 +733,8 @@ impl App {
 
         app.state.pane_id_aliases = pane_id_aliases;
         app.state.workspaces = workspaces;
+        app.state.task_groups = snapshot.task_groups.clone();
+        app.state.reconcile_task_groups();
         app.state.terminals = terminals;
         app.terminal_runtimes = runtimes.into();
         app.state.active = snapshot
@@ -3218,6 +3227,68 @@ mod tests {
         assert!(crate::session::data_dir().join("session.json").exists());
 
         std::env::remove_var("XDG_CONFIG_HOME");
+        let _ = std::fs::remove_dir_all(config_home);
+    }
+
+    #[test]
+    fn session_save_retains_empty_task_groups_without_workspaces() {
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
+        let config_home = unique_temp_path("empty-task-group-session-save");
+        let previous_home = std::env::var_os("XDG_CONFIG_HOME");
+        let previous_session = std::env::var_os(crate::session::SESSION_ENV_VAR);
+        std::env::set_var("XDG_CONFIG_HOME", &config_home);
+        std::env::remove_var(crate::session::SESSION_ENV_VAR);
+        let mut app = test_app();
+        app.policy.persist_session = true;
+        let group = app.state.create_task_group("Next task".into()).unwrap();
+        app.save_session_now();
+        let snapshot = crate::persist::load().expect("empty group must persist");
+        assert_eq!(snapshot.task_groups, [group]);
+        assert!(snapshot.workspaces.is_empty());
+        match previous_home {
+            Some(value) => std::env::set_var("XDG_CONFIG_HOME", value),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
+        match previous_session {
+            Some(value) => std::env::set_var(crate::session::SESSION_ENV_VAR, value),
+            None => std::env::remove_var(crate::session::SESSION_ENV_VAR),
+        }
+        let _ = std::fs::remove_dir_all(config_home);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn handoff_constructor_restores_task_groups_and_reconciles_orphan_members() {
+        let _guard = crate::config::test_config_env_lock().lock().unwrap();
+        let config_home = unique_temp_path("task-group-handoff");
+        let previous_home = std::env::var_os("XDG_CONFIG_HOME");
+        std::env::set_var("XDG_CONFIG_HOME", &config_home);
+        let mut source = test_app();
+        let group = source
+            .state
+            .create_task_group("Empty task survives handoff".into())
+            .unwrap();
+        let mut snapshot = crate::persist::capture_state(&source.state, &source.terminal_runtimes);
+        snapshot.task_groups[0]
+            .workspace_ids
+            .push("missing-workspace".into());
+        let (_tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let restored = App::new_from_handoff(
+            &Config::default(),
+            None,
+            rx,
+            crate::api::EventHub::default(),
+            &snapshot,
+            &mut std::collections::HashMap::new(),
+        )
+        .unwrap();
+        assert_eq!(restored.state.task_groups, [group]);
+        assert!(restored.state.workspaces.is_empty());
+        drop(restored);
+        match previous_home {
+            Some(value) => std::env::set_var("XDG_CONFIG_HOME", value),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
         let _ = std::fs::remove_dir_all(config_home);
     }
 

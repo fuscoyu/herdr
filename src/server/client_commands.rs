@@ -255,6 +255,32 @@ mod tests {
             Some("f5e4a3e01453ae7b188f127ce951c12c20e0bebcc17cc364eeb6d1a01fd5bf81")
         );
 
+        // Task groups are additive JSON methods, independent of the frozen v1 codecs.
+        for (method, digest) in [
+            (
+                "task_group.list",
+                "aea97a49a174b2cd4c4092a8b1108a101b70628fb868254216c4bfa235e53bb5",
+            ),
+            (
+                "task_group.create",
+                "35f01122bf3a6ec2a453e9f878842d8f7846c34462a4273d450d6f86d08d4ca9",
+            ),
+            (
+                "task_group.rename",
+                "298cd34b80cec1d4013a19ffaeefc612aac1068902e82d31ecd7555b621cf553",
+            ),
+            (
+                "task_group.delete",
+                "a61f1d423c1a8e3147d1b220c5d199c51b348cd77c3703c9b0fc574e55212025",
+            ),
+            (
+                "task_group.assign",
+                "3165fd5c9903fd54ac73f69bf43a937e4592c557cfb852dbf704339de998d8d8",
+            ),
+        ] {
+            assert_eq!(actual.remove(method).as_deref(), Some(digest), "{method}");
+        }
+
         assert_eq!(
             actual, expected,
             "an existing endpoint method changed shape; add load-bearing behavior as a new advertised method or explicitly gate new fields"

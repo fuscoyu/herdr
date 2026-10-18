@@ -278,6 +278,12 @@ pub enum ResponseResult {
         projection_revision: u64,
     },
     Ok {},
+    TaskGroupList {
+        groups: Vec<crate::task_groups::TaskGroup>,
+    },
+    TaskGroupInfo {
+        group: crate::task_groups::TaskGroup,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]

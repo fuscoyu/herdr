@@ -10,6 +10,7 @@ pub(crate) enum EndpointControlMessage {
     HealthPong,
     AgentViewProjection(DecodedAgentViewProjection),
     AgentCompletions(crate::protocol::endpoint::EndpointAgentCompletions),
+    TaskGroups(crate::protocol::endpoint::EndpointTaskGroups),
     Snapshot(Box<crate::protocol::ClientShellSnapshot>),
     Ignored,
 }
@@ -20,6 +21,11 @@ pub(crate) fn decode_endpoint_control(
 ) -> Result<EndpointControlMessage, String> {
     if kind == crate::protocol::endpoint::HEALTH_PONG_KIND {
         return Ok(EndpointControlMessage::HealthPong);
+    }
+    if kind == crate::protocol::endpoint::TASK_GROUPS_KIND {
+        return Ok(serde_json::from_str(data)
+            .map(EndpointControlMessage::TaskGroups)
+            .unwrap_or(EndpointControlMessage::Ignored));
     }
     if kind == crate::protocol::endpoint::AGENT_COMPLETIONS_KIND {
         return Ok(serde_json::from_str(data)
@@ -103,6 +109,31 @@ mod tests {
         assert_eq!(decoded, projection);
         assert!(matches!(
             decode_endpoint_control(&kind, "invalid").unwrap(),
+            EndpointControlMessage::Ignored
+        ));
+    }
+
+    #[test]
+    fn task_groups_optional_control_tolerates_missing_future_and_malformed_data() {
+        let kind = crate::protocol::endpoint::TASK_GROUPS_KIND;
+        let decoded =
+            decode_endpoint_control(kind, r#"{"boot_id":"boot","revision":3,"future":true}"#)
+                .unwrap();
+        let EndpointControlMessage::TaskGroups(projection) = decoded else {
+            panic!("expected task groups");
+        };
+        assert!(projection.task_groups.is_empty());
+        for data in [
+            "not json",
+            r#"{"boot_id":"boot","revision":3,"task_groups":[{"future":true}]}"#,
+        ] {
+            assert!(matches!(
+                decode_endpoint_control(kind, data).unwrap(),
+                EndpointControlMessage::Ignored
+            ));
+        }
+        assert!(matches!(
+            decode_endpoint_control("endpoint.task-groups.v2", "not json").unwrap(),
             EndpointControlMessage::Ignored
         ));
     }

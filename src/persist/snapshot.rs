@@ -18,6 +18,8 @@ pub struct SessionSnapshot {
     #[serde(default)]
     pub version: u32,
     pub workspaces: Vec<WorkspaceSnapshot>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub task_groups: Vec<crate::task_groups::TaskGroup>,
     pub active: Option<usize>,
     pub selected: usize,
     #[serde(default)]
@@ -186,6 +188,8 @@ struct RawSessionSnapshot {
     #[serde(default)]
     workspaces: Vec<serde_json::Value>,
     #[serde(default)]
+    task_groups: Vec<crate::task_groups::TaskGroup>,
+    #[serde(default)]
     active: Option<usize>,
     #[serde(default)]
     selected: usize,
@@ -200,6 +204,7 @@ struct RawSessionSnapshot {
 fn migrate_snapshot(raw: RawSessionSnapshot) -> Result<SessionSnapshot, String> {
     Ok(SessionSnapshot {
         version: raw.version,
+        task_groups: raw.task_groups,
         workspaces: raw
             .workspaces
             .into_iter()
@@ -259,7 +264,24 @@ fn first_pane_id_in_layout(layout: &LayoutSnapshot) -> Option<u32> {
     }
 }
 
-/// Capture the current app state into a serializable snapshot.
+/// Capture session organization alongside workspace runtime data.
+/// Production save/handoff paths use this so empty task groups are also retained.
+pub fn capture_state(
+    state: &crate::app::AppState,
+    terminal_runtimes: &TerminalRuntimeRegistry,
+) -> SessionSnapshot {
+    let mut snapshot = capture(
+        &state.workspaces,
+        &state.terminals,
+        terminal_runtimes,
+        state.active,
+        state.selected,
+    );
+    snapshot.task_groups = state.task_groups.clone();
+    snapshot
+}
+
+/// Capture workspace runtime data without session organization.
 pub fn capture(
     workspaces: &[Workspace],
     terminals: &std::collections::HashMap<
@@ -281,6 +303,7 @@ pub fn capture(
         sidebar_width: None,
         sidebar_section_split: None,
         collapsed_space_keys: std::collections::HashSet::new(),
+        task_groups: Vec::new(),
     }
 }
 
@@ -570,13 +593,7 @@ mod tests {
         state: &AppState,
         terminal_runtimes: &TerminalRuntimeRegistry,
     ) -> SessionSnapshot {
-        capture(
-            &state.workspaces,
-            &state.terminals,
-            terminal_runtimes,
-            state.active,
-            state.selected,
-        )
+        capture_state(state, terminal_runtimes)
     }
 
     fn capture_history_from_state_with_runtimes(
@@ -585,6 +602,57 @@ mod tests {
     ) -> SessionHistorySnapshot {
         let snapshot = capture_from_state_with_runtimes(state, terminal_runtimes);
         capture_history(&snapshot, &state.workspaces, terminal_runtimes)
+    }
+
+    #[test]
+    fn task_groups_roundtrip_with_individual_members_and_empty_groups() {
+        let mut state =
+            state_with_workspaces(&["bots/taskA", "common/taskA", "bots/taskB", "common/taskB"]);
+        let a = state.create_task_group("Task A".into()).unwrap();
+        let b = state.create_task_group("Task B".into()).unwrap();
+        state.create_task_group("Empty task".into()).unwrap();
+        let ids = state
+            .workspaces
+            .iter()
+            .map(|ws| ws.id.clone())
+            .collect::<Vec<_>>();
+        for id in &ids[..2] {
+            state.assign_workspace_task_group(id, Some(&a.id)).unwrap();
+        }
+        for id in &ids[2..] {
+            state.assign_workspace_task_group(id, Some(&b.id)).unwrap();
+        }
+        let snapshot = capture_from_state(&state);
+        let encoded = serde_json::to_string(&snapshot).unwrap();
+        let decoded = parse_snapshot(&encoded).unwrap();
+        assert_eq!(decoded.version, SNAPSHOT_VERSION);
+        assert_eq!(decoded.task_groups, state.task_groups);
+        assert_eq!(decoded.workspaces.len(), 4);
+        assert!(decoded.task_groups[2].workspace_ids.is_empty());
+    }
+
+    #[test]
+    fn task_groups_are_optional_in_legacy_and_current_snapshots() {
+        for fixture in [
+            include_str!("../../tests/fixtures/session/current-herdr-session.json"),
+            r#"{"version":3,"workspaces":[],"active":null,"selected":0}"#,
+            r#"{"version":0,"workspaces":[],"active":null,"selected":0}"#,
+        ] {
+            let snapshot = parse_snapshot(fixture).unwrap();
+            assert!(snapshot.task_groups.is_empty());
+            let json = serde_json::to_value(&snapshot).unwrap();
+            assert!(json.get("task_groups").is_none());
+        }
+    }
+
+    #[test]
+    fn task_groups_survive_when_all_workspaces_are_closed() {
+        let mut state = AppState::test_new();
+        let group = state.create_task_group("Prepare next task".into()).unwrap();
+        let snapshot = capture_from_state(&state);
+        let decoded = parse_snapshot(&serde_json::to_string(&snapshot).unwrap()).unwrap();
+        assert_eq!(decoded.task_groups, vec![group]);
+        assert!(decoded.workspaces.is_empty());
     }
 
     fn root_split_ratio(tab: &TabSnapshot) -> Option<f32> {
@@ -663,6 +731,7 @@ mod tests {
             sidebar_width: Some(26),
             sidebar_section_split: Some(0.5),
             collapsed_space_keys: std::collections::HashSet::new(),
+            task_groups: Vec::new(),
         };
         let json = serde_json::to_string(&snap).unwrap();
         let restored = parse_snapshot(&json).unwrap();
@@ -752,6 +821,7 @@ mod tests {
             sidebar_width: Some(26),
             sidebar_section_split: Some(0.5),
             collapsed_space_keys: std::collections::HashSet::new(),
+            task_groups: Vec::new(),
             version: SNAPSHOT_VERSION,
         };
 
@@ -1453,6 +1523,7 @@ mod tests {
             sidebar_width: Some(26),
             sidebar_section_split: Some(0.5),
             collapsed_space_keys: std::collections::HashSet::new(),
+            task_groups: Vec::new(),
         };
 
         let json = serde_json::to_string(&snap).unwrap();

@@ -22,6 +22,7 @@ pub(crate) struct ClientShellEndpoint {
     pending_agent_view_projection: Option<ClientEndpointAgentViewProjection>,
     pub(crate) agent_view_projection_supported: bool,
     pub(crate) methods: Option<HashSet<String>>,
+    task_group_projection: crate::client::endpoint::TaskGroupProjection,
 }
 
 pub(super) struct MachineHit {
@@ -88,6 +89,9 @@ impl ClientShellState {
                 agent_view_projection_supported: previous
                     .is_some_and(|endpoint| endpoint.agent_view_projection_supported),
                 methods: previous.and_then(|endpoint| endpoint.methods.clone()),
+                task_group_projection: previous
+                    .map(|endpoint| endpoint.task_group_projection.clone())
+                    .unwrap_or_default(),
             });
         }
 
@@ -133,6 +137,7 @@ impl ClientShellState {
             endpoint.agent_view_projection = None;
             endpoint.pending_agent_view_projection = None;
             endpoint.agent_view_projection_supported = false;
+            endpoint.task_group_projection = Default::default();
         }
     }
 
@@ -320,6 +325,41 @@ impl ClientShellState {
             .snapshot
             .as_deref()
             .map(|snapshot| (snapshot.boot_id.as_str(), snapshot.revision))
+    }
+
+    pub(crate) fn set_endpoint_task_groups(
+        &mut self,
+        endpoint_id: &ClientEndpointId,
+        generation: u64,
+        projection: crate::protocol::endpoint::EndpointTaskGroups,
+    ) -> bool {
+        let Some(endpoint) = self
+            .endpoints
+            .iter_mut()
+            .find(|endpoint| &endpoint.endpoint_id == endpoint_id)
+        else {
+            return false;
+        };
+        let changed = endpoint.task_group_projection.receive(
+            generation,
+            projection,
+            endpoint.snapshot_generation,
+            endpoint.snapshot.as_deref_mut(),
+        );
+        if changed
+            && endpoint_id == &self.active_endpoint_id
+            && self.active_snapshot_generation == Some(generation)
+        {
+            if let (Some(presented), Some(cached)) =
+                (self.snapshot.as_deref_mut(), endpoint.snapshot.as_deref())
+            {
+                // A late companion must not activate metadata waiting for its surface.
+                if presented.boot_id == cached.boot_id && presented.revision == cached.revision {
+                    presented.task_groups.clone_from(&cached.task_groups);
+                }
+            }
+        }
+        changed
     }
 
     pub(crate) fn set_endpoint_agent_completions(
@@ -574,6 +614,15 @@ impl ClientShellState {
         if boot_changed {
             self.retire_endpoint_notifications(endpoint_id);
         }
+        let endpoint = &mut self.endpoints[index];
+        endpoint.task_group_projection.project(
+            generation,
+            &mut snapshot,
+            endpoint
+                .snapshot
+                .as_deref()
+                .map(|previous| (previous, endpoint.snapshot_generation)),
+        );
         self.endpoints[index]
             .agent_presentation
             .project_snapshot_for_generation(&mut snapshot, generation);
@@ -742,5 +791,6 @@ pub(super) fn local_endpoint() -> ClientShellEndpoint {
         pending_agent_view_projection: None,
         agent_view_projection_supported: false,
         methods: None,
+        task_group_projection: Default::default(),
     }
 }

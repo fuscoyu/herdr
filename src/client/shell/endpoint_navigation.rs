@@ -13,6 +13,9 @@ impl ClientShellState {
 
     pub(super) fn endpoint_workspace_is_draggable(&self, press: &ClientWorkspacePress) -> bool {
         press.endpoint_id == self.active_endpoint_id
+            && self.snapshot.as_deref().is_some_and(|snapshot| {
+                !super::task_groups::workspace_is_assigned(snapshot, &press.workspace_id)
+            })
             && self
                 .snapshot
                 .as_deref()

@@ -12,6 +12,7 @@ pub mod response;
 pub mod server;
 pub mod session;
 pub mod tabs;
+pub mod task_groups;
 pub mod workspaces;
 pub mod worktrees;
 
@@ -26,6 +27,7 @@ pub use response::*;
 pub use server::*;
 pub use session::*;
 pub use tabs::*;
+pub use task_groups::*;
 pub use workspaces::*;
 pub use worktrees::*;
 
@@ -145,6 +147,11 @@ operations::define_operations! {
     PluginPaneOpen(PluginPaneOpenParams) => "plugin.pane.open", true, false;
     PluginPaneFocus(PluginPaneFocusParams) => "plugin.pane.focus", true, false;
     PluginPaneClose(PluginPaneCloseParams) => "plugin.pane.close", true, false;
+    TaskGroupList(EmptyParams) => "task_group.list", false, true;
+    TaskGroupCreate(TaskGroupCreateParams) => "task_group.create", true, true;
+    TaskGroupRename(TaskGroupRenameParams) => "task_group.rename", true, true;
+    TaskGroupDelete(TaskGroupTarget) => "task_group.delete", true, true;
+    TaskGroupAssign(TaskGroupAssignParams) => "task_group.assign", true, true;
 }
 
 #[cfg(test)]

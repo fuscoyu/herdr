@@ -684,6 +684,27 @@ impl HeadlessServer {
                     } else {
                         None
                     };
+                    let task_groups_framed = if !candidate.task_groups.is_empty()
+                        || client
+                            .shell_snapshot
+                            .as_ref()
+                            .is_some_and(|snapshot| !snapshot.task_groups.is_empty())
+                    {
+                        match crate::protocol::endpoint::task_groups_message(&candidate)
+                            .map_err(std::io::Error::other)
+                            .and_then(|message| {
+                                Self::frame_server_message(&message).map_err(std::io::Error::other)
+                            }) {
+                            Ok(message) => Some(message),
+                            Err(err) => {
+                                warn!(client_id, err = %err, "failed to frame endpoint task groups");
+                                broken_clients.push(client_id);
+                                continue;
+                            }
+                        }
+                    } else {
+                        None
+                    };
                     let snapshot_message =
                         match crate::protocol::endpoint::snapshot_message(&candidate) {
                             Ok(message) => message,
@@ -718,6 +739,8 @@ impl HeadlessServer {
                         continue;
                     };
                     if projection_framed.is_some_and(|framed| writer.control.send(framed).is_err())
+                        || task_groups_framed
+                            .is_some_and(|framed| writer.control.send(framed).is_err())
                         || writer.control.send(completion_framed).is_err()
                         || writer.control.send(snapshot_framed).is_err()
                     {

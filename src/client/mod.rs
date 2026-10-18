@@ -2126,6 +2126,27 @@ async fn run_client_loop(
                                 }
                                 continue;
                             }
+                            Ok(endpoint::EndpointControlMessage::TaskGroups(projection)) => {
+                                let frame = state.shell.as_mut().and_then(|shell| {
+                                    shell
+                                        .set_endpoint_task_groups(
+                                            &endpoint_id,
+                                            generation,
+                                            projection,
+                                        )
+                                        .then(|| {
+                                            shell.compose(
+                                                state.reported_size.0,
+                                                state.reported_size.1,
+                                            )
+                                        })
+                                        .flatten()
+                                });
+                                if let Some(frame) = frame {
+                                    state.present_frozen_chrome(frame);
+                                }
+                                continue;
+                            }
                             Ok(endpoint::EndpointControlMessage::AgentCompletions(projection)) => {
                                 if let Some(shell) = state.shell.as_mut() {
                                     shell.set_endpoint_agent_completions(

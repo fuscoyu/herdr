@@ -69,6 +69,12 @@ pub(super) struct SpawnedServerProcess {
     child: std::process::Child,
 }
 
+impl SpawnedServerProcess {
+    pub(super) fn wait_for_exit(&mut self) -> std::process::ExitStatus {
+        self.child.wait().expect("server process should exit")
+    }
+}
+
 impl Drop for SpawnedServerProcess {
     fn drop(&mut self) {
         let pid = self.child.id();

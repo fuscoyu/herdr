@@ -11,6 +11,7 @@ mod message_policy;
 mod registry;
 mod ssh_metadata;
 mod supervisor;
+mod task_groups;
 mod writer;
 
 pub(crate) use activation::*;
@@ -20,6 +21,7 @@ pub(crate) use message_policy::*;
 pub(crate) use registry::*;
 pub(crate) use ssh_metadata::{SshMachineMetadata, SshMetadataCache};
 pub(crate) use supervisor::*;
+pub(crate) use task_groups::TaskGroupProjection;
 pub(crate) use writer::NativeEndpointTransport;
 
 const PROFILE_ID_BYTES: usize = 16;

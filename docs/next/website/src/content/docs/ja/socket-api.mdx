@@ -97,6 +97,7 @@ herdr pane read w1:p2 --source recent --lines 50
 | クライアント | `client.window_title.set`、`client.window_title.clear` |
 | セッション | `session.snapshot` |
 | ワークスペース | `workspace.create`、`workspace.list`、`workspace.get`、`workspace.focus`、`workspace.rename`、`workspace.move`、`workspace.move_block`、`workspace.report_metadata`、`workspace.close` |
+| タスクグループ | `task_group.list`, `task_group.create`, `task_group.rename`, `task_group.delete`, `task_group.assign` |
 | Worktree | `worktree.list`、`worktree.create`、`worktree.open`、`worktree.remove` |
 | タブ | `tab.create`、`tab.list`、`tab.get`、`tab.focus`、`tab.rename`、`tab.move`、`tab.close` |
 | ペイン | `pane.split`、`pane.swap`、`pane.move`、`pane.zoom`、`pane.layout`、`pane.process_info`、`pane.neighbor`、`pane.edges`、`pane.focus_direction`、`pane.resize`、`pane.list`、`pane.current`、`pane.get`、`pane.rename`、`pane.send_text`、`pane.send_keys`、`pane.send_input`、`pane.read`、`pane.report_agent`、`pane.report_agent_session`、`pane.report_metadata`、`pane.clear_agent_authority`、`pane.release_agent`、`pane.close`、`pane.wait_for_output` |
@@ -106,6 +107,12 @@ herdr pane read w1:p2 --source recent --lines 50
 | イベント | `events.subscribe`、`events.wait` |
 | インテグレーション | `integration.install`、`integration.uninstall` |
 | プラグイン | `plugin.link`、`plugin.list`、`plugin.unlink`、`plugin.enable`、`plugin.disable`、`plugin.action.list`、`plugin.action.invoke`、`plugin.log.list`、`plugin.pane.open`、`plugin.pane.focus`、`plugin.pane.close` |
+
+`task_group.list` は `{type: "task_group_list", groups: [...]}` を返します。各グループは `id`、`label`、`workspace_ids` を持ちます。`task_group.create` は `{label, workspace_id?}` を受け付け、省略可能なワークスペースを作成前に検証するため、無効な入力で空のグループが残ることはありません。`task_group.rename` は `{group_id, label}` を受け付けます。どちらも `{type: "task_group_info", group: {...}}` を返します。
+
+`task_group.assign` は `{workspace_id, group_id}` を受け付け、指定したワークスペースだけを選択したグループへ移します。`group_id` を `null` にするか省略すると所属を解除します。ワークスペースは `workspace.get` と同じ安定した ID または数値エイリアスで指定でき、保存された所属情報と一覧は常に安定した ID を使います。`task_group.delete` は `{group_id}` を受け付け、グループだけを削除して、ワークスペース、ターミナル、worktree、ブランチを維持します。所属の変更と削除は `{type: "ok"}` を返します。グループがない場合は `task_group_not_found`、ワークスペースがない場合は `workspace_not_found`、ラベルが無効な場合は `invalid_params` を返します。ラベルは前後の空白を除いて 1〜128 文字で、制御文字は使用できません。
+
+空のグループも含めてサーバーセッションに保存されます。所属はリポジトリ識別子とは独立しており、ファイルシステムを分離しません。最新のグループ情報は `task_group.list` で取得してください。既存の `workspace` と `session.snapshot` のレスポンス形式は変わりません。
 
 `agent.wait` はサーバー所有でイベント駆動です。解決したペイン占有者に固定されるため、置換されたエージェントが待機を満たすことはありません。`agent.prompt` は `until` と `timeout_ms` を持つ省略可能な `wait` オブジェクトを受け付けます。これにより、プロンプト送信と待機開始を 1 つのリクエストで行い、別々の呼び出し間の競合を避けられます。解決したエージェントがすでに `blocked` の場合、`agent.prompt` は入力を送信せず、待機も開始せずに `agent_blocked` を返します。
 

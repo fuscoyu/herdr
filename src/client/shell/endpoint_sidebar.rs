@@ -268,6 +268,10 @@ pub(super) fn render_expanded(
 
     enum Row {
         Endpoint(usize),
+        TaskGroup {
+            endpoint: usize,
+            group: usize,
+        },
         Workspace {
             endpoint: usize,
             entry: WorkspaceEntry,
@@ -283,11 +287,17 @@ pub(super) fn render_expanded(
             let collapsed_groups = collapsed_groups_for_endpoint(state, &endpoint.endpoint_id)
                 .unwrap_or(&empty_collapsed_groups);
             rows.extend(
-                super::sidebar::workspace_entries(snapshot, collapsed_groups)
+                super::sidebar::sidebar_entries(snapshot, collapsed_groups)
                     .into_iter()
-                    .map(|entry| Row::Workspace {
-                        endpoint: endpoint_index,
-                        entry,
+                    .map(|row| match row {
+                        super::sidebar::SidebarEntry::TaskGroup(group) => Row::TaskGroup {
+                            endpoint: endpoint_index,
+                            group,
+                        },
+                        super::sidebar::SidebarEntry::Workspace(entry) => Row::Workspace {
+                            endpoint: endpoint_index,
+                            entry,
+                        },
                     }),
             );
         }
@@ -304,7 +314,7 @@ pub(super) fn render_expanded(
     let row_heights = rows
         .iter()
         .map(|row| match row {
-            Row::Endpoint(_) => 1,
+            Row::Endpoint(_) | Row::TaskGroup { .. } => 1,
             Row::Workspace { endpoint, entry } => {
                 let endpoint = &state.endpoints[*endpoint];
                 let collapsed_groups = collapsed_groups_for_endpoint(state, &endpoint.endpoint_id)
@@ -317,12 +327,16 @@ pub(super) fn render_expanded(
                         Some(
                             super::sidebar::workspace_rows(
                                 workspace,
-                                super::sidebar::displayed_workspace_status(
-                                    snapshot,
-                                    workspace,
-                                    collapsed_groups,
-                                ),
-                                entry.indented,
+                                if entry.task_group {
+                                    workspace.agent_status
+                                } else {
+                                    super::sidebar::displayed_workspace_status(
+                                        snapshot,
+                                        workspace,
+                                        collapsed_groups,
+                                    )
+                                },
+                                entry.indented && !entry.task_group,
                                 &config.spaces,
                             )
                             .len()
@@ -372,7 +386,7 @@ pub(super) fn render_expanded(
                         }
                     })
             }
-            Row::Endpoint(_) => false,
+            Row::Endpoint(_) | Row::TaskGroup { .. } => false,
         });
         if let Some(selected_row) = selected_row {
             *state.workspace_scroll = super::scroll::list_scroll_start_to_reveal(
@@ -432,6 +446,38 @@ pub(super) fn render_expanded(
                     .saturating_add(1)
                     .saturating_add(gaps.get(row_index).copied().unwrap_or(0));
             }
+            Row::TaskGroup { endpoint, group } => {
+                if y >= body.bottom() {
+                    break;
+                }
+                let endpoint = &state.endpoints[*endpoint];
+                let Some(group) = endpoint
+                    .snapshot
+                    .as_deref()
+                    .and_then(|snapshot| snapshot.task_groups.get(*group))
+                else {
+                    continue;
+                };
+                let collapsed_groups = collapsed_groups_for_endpoint(state, &endpoint.endpoint_id)
+                    .unwrap_or(&empty_collapsed_groups);
+                super::task_groups::render_group_header(
+                    buffer,
+                    Rect::new(
+                        body.x.saturating_add(2),
+                        y,
+                        content_width.saturating_sub(2),
+                        1,
+                    ),
+                    group,
+                    collapsed_groups.contains(&super::task_groups::collapse_key(&group.id)),
+                    &endpoint.endpoint_id,
+                    palette,
+                    hits,
+                );
+                y = y
+                    .saturating_add(1)
+                    .saturating_add(gaps.get(row_index).copied().unwrap_or(0));
+            }
             Row::Workspace { endpoint, entry } => {
                 let endpoint = &state.endpoints[*endpoint];
                 let Some(snapshot) = endpoint.snapshot.as_deref() else {
@@ -442,15 +488,19 @@ pub(super) fn render_expanded(
                 };
                 let collapsed_groups = collapsed_groups_for_endpoint(state, &endpoint.endpoint_id)
                     .unwrap_or(&empty_collapsed_groups);
-                let status = super::sidebar::displayed_workspace_status(
-                    snapshot,
-                    workspace,
-                    collapsed_groups,
-                );
+                let status = if entry.task_group {
+                    workspace.agent_status
+                } else {
+                    super::sidebar::displayed_workspace_status(
+                        snapshot,
+                        workspace,
+                        collapsed_groups,
+                    )
+                };
                 let tokens = super::sidebar::workspace_rows(
                     workspace,
                     status,
-                    entry.indented,
+                    entry.indented && !entry.task_group,
                     &config.spaces,
                 );
                 let height = (tokens.len().max(1).min(u16::MAX as usize) as u16).min(body.height);
@@ -489,14 +539,18 @@ pub(super) fn render_expanded(
                             .add_modifier(Modifier::DIM),
                     );
                 }
-                let group_toggle = super::sidebar::render_parent_group_toggle(
-                    buffer,
-                    rect,
-                    snapshot,
-                    entry.index,
-                    collapsed_groups,
-                    palette,
-                );
+                let group_toggle = if entry.task_group {
+                    None
+                } else {
+                    super::sidebar::render_parent_group_toggle(
+                        buffer,
+                        rect,
+                        snapshot,
+                        entry.index,
+                        collapsed_groups,
+                        palette,
+                    )
+                };
                 hits.workspaces.push(WorkspaceHit {
                     rect,
                     endpoint_id: endpoint.endpoint_id.clone(),
