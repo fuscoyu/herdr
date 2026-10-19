@@ -132,7 +132,7 @@ fn task_groups_project_cross_repo_members_and_preserve_unassigned_worktrees() {
 }
 
 #[test]
-fn task_groups_collapse_is_namespaced_and_retains_focused_member() {
+fn task_groups_collapse_hides_all_members_including_focused_and_expands_again() {
     let mut snapshot = task_snapshot();
     snapshot.workspaces[0].focused = false;
     snapshot.workspaces[1].focused = true;
@@ -146,7 +146,6 @@ fn task_groups_collapse_is_namespaced_and_retains_focused_member() {
         projected_ids(&snapshot, &collapsed),
         [
             "group:a",
-            "bots_a",
             "group:b",
             "bots_b",
             "common_b",
@@ -161,8 +160,13 @@ fn task_groups_collapse_is_namespaced_and_retains_focused_member() {
         .all(|entry| snapshot.workspaces.get(entry.index).is_some()));
     assert_eq!(
         navigation.iter().filter(|entry| entry.task_group).count(),
-        3
+        2
     );
+    let expanded = projected_ids(&snapshot, &HashSet::from(["bots".into()]));
+    assert!(expanded.contains(&"bots_a".to_owned()));
+    assert!(expanded.contains(&"common_a".to_owned()));
+    assert_eq!(snapshot.focused_workspace_id.as_deref(), Some("bots_a"));
+    assert!(snapshot.workspaces[1].focused);
 }
 
 #[test]
@@ -204,15 +208,11 @@ fn task_groups_render_headers_and_member_repository_labels_without_workspace_hit
         .iter()
         .map(|cell| cell.symbol.as_str())
         .collect::<String>();
-    for label in [
-        "Task A",
-        "Task B",
-        "Empty task",
-        "bots/taskA",
-        "common/taskA",
-    ] {
+    for label in ["Task A", "Task B", "Empty task", "bots", "common"] {
         assert!(text.contains(label), "missing {label}");
     }
+    assert!(!text.contains("bots/taskA"));
+    assert!(!text.contains("common/taskA"));
     assert_eq!(state.hits.task_groups.len(), 3);
     assert_eq!(state.hits.workspaces.len(), 7);
     for header in &state.hits.task_groups {
@@ -403,9 +403,19 @@ fn task_groups_endpoint_headers_collapse_independently_and_hide_with_machine() {
     state.set_endpoint_status(&remote_id, ClientEndpointStatus::Online);
     let mut remote = task_snapshot();
     remote.boot_id = "remote-boot".into();
+    remote.workspaces[0].focused = false;
+    remote.workspaces[1].focused = true;
+    remote.focused_workspace_id = Some("bots_a".into());
     state.set_endpoint_snapshot(&remote_id, Box::new(remote));
     state.toggle_collapsed_group(&remote_id, "task-group:a".into());
-    state.compose(120, 90).unwrap();
+    let frame = state.compose(120, 90).unwrap();
+    let text = frame
+        .cells
+        .iter()
+        .map(|cell| cell.symbol.as_str())
+        .collect::<String>();
+    assert!(!text.contains("common/taskB"));
+    assert!(text.contains("common"));
     assert!(state
         .hits
         .workspaces
@@ -647,4 +657,64 @@ fn task_groups_render_scale_profile() {
             timings[1].as_secs_f64() / timings[0].as_secs_f64()
         );
     }
+}
+
+#[test]
+fn task_groups_member_labels_use_repository_without_redundant_git_details() {
+    use crate::ui::ResolvedTokenKind;
+    let snapshot = task_snapshot();
+    let mut workspace = snapshot.workspaces[1].clone();
+    workspace.custom_label = true;
+    workspace.git_ahead_behind = Some((1, 4));
+    let mut entry = sidebar::workspace_entries(&snapshot, &HashSet::new())
+        .into_iter()
+        .find(|entry| snapshot.workspaces[entry.index].workspace_id == "bots_a")
+        .unwrap();
+    let config = Config::default().ui.sidebar.spaces;
+    let rows = sidebar::workspace_rows(&workspace, AgentStatus::Idle, &entry, &config);
+    assert!(rows[0].iter().any(|token| matches!(&token.kind,
+        ResolvedTokenKind::Workspace(label) if label == "bots")));
+    assert_eq!(rows.len(), 1);
+    assert!(!rows.iter().flatten().any(|token| matches!(
+        &token.kind,
+        ResolvedTokenKind::Branch(_) | ResolvedTokenKind::GitStatus { .. }
+    )));
+
+    // Missing repository metadata must not guess a name from a checkout path.
+    for metadata in [
+        None,
+        Some(ClientShellWorktree {
+            key: "bots".into(),
+            label: " ".into(),
+            is_linked_worktree: true,
+        }),
+    ] {
+        workspace.worktree = metadata;
+        let rows = sidebar::workspace_rows(&workspace, AgentStatus::Idle, &entry, &config);
+        assert!(rows.iter().flatten().any(|token| matches!(&token.kind,
+            ResolvedTokenKind::Workspace(label) if label == "bots/taskA")));
+    }
+    // Ungrouped custom names and linked-worktree branch labels keep existing behavior.
+    entry.task_group = false;
+    for (custom, expected) in [(true, "bots/taskA"), (false, "taskA")] {
+        workspace.custom_label = custom;
+        let rows = sidebar::workspace_rows(&workspace, AgentStatus::Idle, &entry, &config);
+        assert!(rows.iter().flatten().any(|token| matches!(&token.kind,
+            ResolvedTokenKind::Workspace(label) if label == expected)));
+        assert!(!rows.iter().flatten().any(|token| matches!(
+            &token.kind,
+            ResolvedTokenKind::Branch(_) | ResolvedTokenKind::GitStatus { .. }
+        )));
+    }
+    entry.indented = false;
+    let rows = sidebar::workspace_rows(&workspace, AgentStatus::Idle, &entry, &config);
+    assert!(rows.iter().flatten().any(|token| matches!(&token.kind,
+        ResolvedTokenKind::Branch(branch) if branch == "taskA")));
+    assert!(rows.iter().flatten().any(|token| matches!(
+        &token.kind,
+        ResolvedTokenKind::GitStatus {
+            ahead: 1,
+            behind: 4
+        }
+    )));
 }

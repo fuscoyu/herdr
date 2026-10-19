@@ -253,7 +253,7 @@ pub(crate) fn render_sidebar(
                         } else {
                             displayed_workspace_status(snapshot, workspace, state.collapsed_groups)
                         },
-                        entry.indented && !entry.task_group,
+                        entry,
                         &config.spaces,
                     )
                     .len()
@@ -353,12 +353,7 @@ pub(crate) fn render_sidebar(
         } else {
             displayed_workspace_status(snapshot, workspace, state.collapsed_groups)
         };
-        let rows = workspace_rows(
-            workspace,
-            status,
-            entry.indented && !entry.task_group,
-            &config.spaces,
-        );
+        let rows = workspace_rows(workspace, status, entry, &config.spaces);
         let row_height = (rows.len().max(1).min(u16::MAX as usize) as u16).min(body.height);
         if y.saturating_add(row_height) > body.bottom() {
             break;
@@ -553,7 +548,7 @@ pub(in crate::client::shell) fn sidebar_entries(
             .filter_map(|id| {
                 let index = *indices.get(id.as_str())?;
                 // Claim hidden members too, so a stale duplicate cannot reappear elsewhere.
-                if !emitted.insert(index) || (collapsed && !snapshot.workspaces[index].focused) {
+                if !emitted.insert(index) || collapsed {
                     return None;
                 }
                 Some(index)
@@ -830,10 +825,18 @@ pub(in crate::client::shell) fn displayed_workspace_status(
 pub(in crate::client::shell) fn workspace_rows(
     workspace: &ClientShellWorkspace,
     status: crate::api::schema::AgentStatus,
-    indented: bool,
+    entry: &WorkspaceEntry,
     config: &SpacesSidebarConfig,
 ) -> Vec<Vec<crate::ui::ResolvedToken>> {
-    let label = if indented && !workspace.custom_label {
+    let indented = entry.indented && !entry.task_group;
+    let label = if entry.task_group {
+        workspace
+            .worktree
+            .as_ref()
+            .map(|worktree| worktree.label.as_str())
+            .filter(|label| !label.trim().is_empty())
+            .unwrap_or(&workspace.label)
+    } else if indented && !workspace.custom_label {
         workspace
             .branch
             .as_deref()
@@ -851,7 +854,7 @@ pub(in crate::client::shell) fn workspace_rows(
             state_text: status_text(status),
             ahead_behind: workspace.git_ahead_behind,
             tokens: &token_values,
-            suppress_git_details: indented,
+            suppress_git_details: indented || entry.task_group,
         },
     )
 }
