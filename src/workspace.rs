@@ -46,6 +46,7 @@ pub struct WorkspaceGitStatus {
     pub demand: GitStatusRefreshDemand,
     pub auto_label: String,
     pub branch: Option<String>,
+    pub detached: bool,
     pub ahead_behind: Option<(usize, usize)>,
     pub space: Option<GitSpaceMetadata>,
 }
@@ -54,6 +55,7 @@ pub struct WorkspaceGitStatus {
 pub struct WorkspaceGitStatusSnapshot {
     pub auto_label: String,
     pub branch: Option<String>,
+    pub detached: bool,
     pub ahead_behind: Option<(usize, usize)>,
     pub space: Option<GitSpaceMetadata>,
 }
@@ -95,6 +97,7 @@ impl WorkspaceGitStatusSnapshot {
             demand,
             auto_label,
             branch: self.branch,
+            detached: self.detached,
             ahead_behind: self.ahead_behind,
             space: self.space,
         }
@@ -188,6 +191,10 @@ pub struct Workspace {
     pub(crate) cached_git_status_key: PathBuf,
     /// Cached current git branch for the workspace repo.
     pub(crate) cached_git_branch: Option<String>,
+    pub(crate) cached_git_detached: bool,
+    /// State-only cwd observed when the last validated HEAD result was applied.
+    /// This is deliberately separate from the process-resolved Git identity cwd.
+    pub(crate) cached_git_observed_cwd: Option<PathBuf>,
     /// Cached ahead/behind counts for the workspace repo's current branch upstream.
     pub(crate) cached_git_ahead_behind: Option<(usize, usize)>,
     /// Cached derived Git repo metadata for worktree actions and status display.
@@ -257,6 +264,8 @@ impl Workspace {
             cached_auto_label,
             cached_git_status_key,
             cached_git_branch: git_branch(&identity_cwd),
+            cached_git_detached: false,
+            cached_git_observed_cwd: None,
             cached_git_ahead_behind: None,
             cached_git_space,
             worktree_space: None,
@@ -409,6 +418,8 @@ impl Workspace {
                 cached_auto_label,
                 cached_git_status_key,
                 cached_git_branch: git_branch(&initial_cwd),
+                cached_git_detached: false,
+                cached_git_observed_cwd: None,
                 cached_git_ahead_behind: None,
                 cached_git_space,
                 worktree_space: None,
@@ -1068,6 +1079,43 @@ impl Workspace {
         }
     }
 
+    fn observed_identity_cwd<'a>(
+        &'a self,
+        terminals: &'a HashMap<TerminalId, TerminalState>,
+    ) -> &'a std::path::Path {
+        self.tabs
+            .first()
+            .and_then(|tab| tab.terminal_id(tab.root_pane))
+            .and_then(|terminal_id| terminals.get(terminal_id))
+            .map(|terminal| terminal.cwd.as_path())
+            .unwrap_or(self.identity_cwd.as_path())
+    }
+
+    /// Call only after the refresh result's resolved identity has been validated.
+    pub(crate) fn cache_git_head_observation(
+        &mut self,
+        detached: bool,
+        terminals: &HashMap<TerminalId, TerminalState>,
+    ) -> bool {
+        let observed_cwd = self.observed_identity_cwd(terminals);
+        let changed = self.cached_git_detached != detached
+            || self.cached_git_observed_cwd.as_deref() != Some(observed_cwd);
+        self.cached_git_observed_cwd = Some(observed_cwd.to_path_buf());
+        self.cached_git_detached = detached;
+        changed
+    }
+
+    /// Pure projection: an observed cwd change invalidates the prior HEAD fact.
+    /// Process cwd may differ from TerminalState.cwd when a shell does not send OSC 7.
+    pub(crate) fn git_head_is_detached_from_terminals(
+        &self,
+        terminals: &HashMap<TerminalId, TerminalState>,
+    ) -> bool {
+        self.cached_git_detached
+            && self.cached_git_observed_cwd.as_deref()
+                == Some(self.observed_identity_cwd(terminals))
+    }
+
     pub fn branch(&self) -> Option<String> {
         self.cached_git_branch.clone()
     }
@@ -1198,6 +1246,8 @@ impl Workspace {
             cached_auto_label: fallback_label_from_cwd(&identity_cwd),
             cached_git_status_key: identity_cwd.clone(),
             cached_git_branch: git_branch(&identity_cwd),
+            cached_git_detached: false,
+            cached_git_observed_cwd: None,
             cached_git_ahead_behind: None,
             cached_git_space: None,
             worktree_space: None,

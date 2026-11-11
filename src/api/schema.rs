@@ -11,6 +11,7 @@ pub mod response;
 pub mod server;
 pub mod session;
 pub mod tabs;
+pub mod task_groups;
 pub mod workspaces;
 pub mod worktrees;
 
@@ -25,6 +26,7 @@ pub use response::*;
 pub use server::*;
 pub use session::*;
 pub use tabs::*;
+pub use task_groups::*;
 pub use workspaces::*;
 pub use worktrees::*;
 
@@ -249,6 +251,16 @@ pub enum Method {
     PluginPaneFocus(PluginPaneFocusParams),
     #[serde(rename = "plugin.pane.close")]
     PluginPaneClose(PluginPaneCloseParams),
+    #[serde(rename = "task_group.list")]
+    TaskGroupList(EmptyParams),
+    #[serde(rename = "task_group.create")]
+    TaskGroupCreate(TaskGroupCreateParams),
+    #[serde(rename = "task_group.rename")]
+    TaskGroupRename(TaskGroupRenameParams),
+    #[serde(rename = "task_group.delete")]
+    TaskGroupDelete(TaskGroupTarget),
+    #[serde(rename = "task_group.assign")]
+    TaskGroupAssign(TaskGroupAssignParams),
 }
 
 #[cfg(test)]

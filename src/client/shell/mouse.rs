@@ -519,20 +519,41 @@ impl ClientShellState {
             return None;
         }
         let snapshot = self.snapshot.as_deref()?;
+        let assigned = super::task_groups::assigned_workspace_ids(snapshot);
+        // Task headers and members are not reorder targets. Only the unassigned
+        // section participates in the existing repository block reorder gesture.
+        let first_unassigned = self.hits.workspaces.iter().find(|hit| {
+            hit.endpoint_id == self.active_endpoint_id
+                && !assigned.contains(hit.workspace_id.as_str())
+        })?;
+        if point.1 < first_unassigned.rect.y.saturating_sub(1)
+            || self
+                .hits
+                .task_groups
+                .iter()
+                .any(|hit| super::contains(hit.rect, point))
+        {
+            return None;
+        }
         let mut slots = self
             .hits
             .workspaces
             .iter()
-            .filter(|hit| hit.endpoint_id == self.active_endpoint_id && !hit.indented)
+            .filter(|hit| {
+                hit.endpoint_id == self.active_endpoint_id
+                    && !hit.indented
+                    && !assigned.contains(hit.workspace_id.as_str())
+            })
             .filter(|hit| {
                 hit.group_toggle.as_ref().is_none_or(|(_, key)| {
                     snapshot
                         .workspaces
                         .iter()
                         .find(|workspace| {
-                            workspace.worktree.as_ref().is_some_and(|worktree| {
-                                worktree.key == *key && !worktree.is_linked_worktree
-                            })
+                            !assigned.contains(workspace.workspace_id.as_str())
+                                && workspace.worktree.as_ref().is_some_and(|worktree| {
+                                    worktree.key == *key && !worktree.is_linked_worktree
+                                })
                         })
                         .is_some_and(|workspace| workspace.workspace_id == hit.workspace_id)
                 })
@@ -544,12 +565,10 @@ impl ClientShellState {
             .collapsed_groups_for_endpoint(&self.active_endpoint_id)
             .unwrap_or(&empty_collapsed_groups);
         let entries = render::workspace_entries(snapshot, collapsed_groups);
-        let last_hit = self
-            .hits
-            .workspaces
-            .iter()
-            .rev()
-            .find(|hit| hit.endpoint_id == self.active_endpoint_id)?;
+        let last_hit = self.hits.workspaces.iter().rev().find(|hit| {
+            hit.endpoint_id == self.active_endpoint_id
+                && !assigned.contains(hit.workspace_id.as_str())
+        })?;
         let last_position = entries.iter().position(|entry| {
             snapshot
                 .workspaces
@@ -590,6 +609,12 @@ impl ClientShellState {
         before_workspace_id: Option<&str>,
     ) -> Option<crate::api::schema::Method> {
         let snapshot = self.snapshot.as_deref()?;
+        let assigned = super::task_groups::assigned_workspace_ids(snapshot);
+        if assigned.contains(source_workspace_id)
+            || before_workspace_id.is_some_and(|id| assigned.contains(id))
+        {
+            return None;
+        }
         let source = snapshot
             .workspaces
             .iter()
@@ -607,6 +632,7 @@ impl ClientShellState {
         let roots = snapshot
             .workspaces
             .iter()
+            .filter(|workspace| !assigned.contains(workspace.workspace_id.as_str()))
             .filter(|workspace| {
                 !workspace
                     .worktree
@@ -638,7 +664,10 @@ impl ClientShellState {
                     snapshot
                         .workspaces
                         .iter()
-                        .filter(|workspace| workspace.workspace_id != source.workspace_id)
+                        .filter(|workspace| {
+                            workspace.workspace_id != source.workspace_id
+                                && !assigned.contains(workspace.workspace_id.as_str())
+                        })
                         .filter(|workspace| {
                             workspace
                                 .worktree
@@ -1835,11 +1864,47 @@ impl ClientShellState {
                 if !self.config.mouse_capture {
                     return;
                 }
+                let group_id = self
+                    .hits
+                    .task_groups
+                    .iter()
+                    .find(|hit| {
+                        hit.endpoint_id == self.active_endpoint_id
+                            && super::contains(hit.rect, point)
+                    })
+                    .map(|hit| hit.group_id.clone());
+                if let Some(group_id) = group_id {
+                    self.open_task_group_context_menu(group_id, mouse.column, mouse.row);
+                    outcome.repaint = true;
+                    return;
+                }
                 let workspace_id = (!self.sidebar_collapsed)
                     .then(|| self.active_endpoint_workspace_at(point))
                     .flatten();
                 if let Some(workspace_id) = workspace_id {
                     self.open_workspace_context_menu(workspace_id, mouse.column, mouse.row);
+                    outcome.repaint = true;
+                    return;
+                }
+                if !self.sidebar_collapsed
+                    && super::contains(self.hits.workspace_body, point)
+                    && !self
+                        .hits
+                        .workspaces
+                        .iter()
+                        .any(|hit| super::contains(hit.rect, point))
+                    && !self
+                        .hits
+                        .task_groups
+                        .iter()
+                        .any(|hit| super::contains(hit.rect, point))
+                    && !self
+                        .hits
+                        .machines
+                        .iter()
+                        .any(|hit| super::contains(hit.rect, point))
+                {
+                    self.open_task_groups_context_menu(mouse.column, mouse.row);
                     outcome.repaint = true;
                     return;
                 }
@@ -2085,6 +2150,23 @@ impl ClientShellState {
                         .tab_scroll
                         .saturating_add(1)
                         .min(tab_count.saturating_sub(1));
+                    outcome.repaint = true;
+                    return;
+                }
+                let task_group_toggle = self
+                    .hits
+                    .task_groups
+                    .iter()
+                    .find(|hit| super::contains(hit.rect, point))
+                    .map(|hit| {
+                        (
+                            hit.endpoint_id.clone(),
+                            super::task_groups::collapse_key(&hit.group_id),
+                        )
+                    });
+                if let Some((endpoint_id, key)) = task_group_toggle {
+                    self.toggle_collapsed_group(&endpoint_id, key);
+                    self.persist_chrome_preferences(outcome);
                     outcome.repaint = true;
                     return;
                 }

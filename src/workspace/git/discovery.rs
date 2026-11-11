@@ -223,8 +223,23 @@ fn path_is_git_dir_layout(path: &Path) -> bool {
     path.join("HEAD").is_file() && path.join("objects").is_dir() && path.join("refs").is_dir()
 }
 
-pub(super) fn git_symbolic_head_full(repo_root: &Path) -> Option<String> {
-    git_trimmed_stdout(repo_root, &["symbolic-ref", "--quiet", "HEAD"])
+/// Outer None is an unavailable result; inner None is Git's explicit detached status.
+pub(super) fn git_symbolic_head_full(repo_root: &Path) -> Option<Option<String>> {
+    let output = crate::noninteractive_process::command("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["symbolic-ref", "--quiet", "HEAD"])
+        .output()
+        .ok()?;
+    if output.status.code() == Some(1) {
+        return Some(None);
+    }
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    let full_ref = stdout.trim();
+    (!full_ref.is_empty()).then(|| Some(full_ref.to_string()))
 }
 
 fn git_symbolic_head_short(repo_root: &Path) -> Option<String> {

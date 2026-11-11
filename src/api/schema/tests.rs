@@ -1459,3 +1459,90 @@ fn pane_link_resolve_round_trips() {
         result
     );
 }
+
+#[test]
+fn task_group_request_shapes_are_additive_and_round_trip() {
+    for (method, params) in [
+        ("task_group.list", serde_json::json!({})),
+        ("task_group.create", serde_json::json!({"label":"Release"})),
+        (
+            "task_group.create",
+            serde_json::json!({"label":"Release","workspace_id":"w1"}),
+        ),
+        (
+            "task_group.rename",
+            serde_json::json!({"group_id":"g1","label":"Review"}),
+        ),
+        ("task_group.delete", serde_json::json!({"group_id":"g1"})),
+        (
+            "task_group.assign",
+            serde_json::json!({"workspace_id":"w1","group_id":"g1"}),
+        ),
+        (
+            "task_group.assign",
+            serde_json::json!({"workspace_id":"w1","group_id":null}),
+        ),
+    ] {
+        let json = serde_json::json!({"id":"group-test", "method":method, "params":params});
+        let request: Request = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(serde_json::to_value(request).unwrap(), json);
+    }
+    let request: Request = serde_json::from_value(serde_json::json!({
+        "id":"unassign", "method":"task_group.assign", "params":{"workspace_id":"w1"},
+    }))
+    .unwrap();
+    assert!(matches!(
+        request.method,
+        Method::TaskGroupAssign(TaskGroupAssignParams { group_id: None, .. })
+    ));
+    for (method, params) in [
+        ("task_group.create", serde_json::json!({})),
+        ("task_group.rename", serde_json::json!({"group_id":"g1"})),
+        ("task_group.delete", serde_json::json!({})),
+        ("task_group.assign", serde_json::json!({"group_id":"g1"})),
+        (
+            "task_group.assign",
+            serde_json::json!({"workspace_id":"w1","group_id":1}),
+        ),
+    ] {
+        assert!(serde_json::from_value::<Request>(serde_json::json!({
+            "id":"invalid", "method":method, "params":params,
+        }))
+        .is_err());
+    }
+}
+
+#[test]
+fn task_group_methods_are_named_admitted_and_mark_mutations_for_presentation() {
+    for (name, params, changes_ui) in [
+        ("task_group.list", serde_json::json!({}), false),
+        (
+            "task_group.create",
+            serde_json::json!({"label":"Release"}),
+            true,
+        ),
+        (
+            "task_group.rename",
+            serde_json::json!({"group_id":"g1","label":"Review"}),
+            true,
+        ),
+        (
+            "task_group.delete",
+            serde_json::json!({"group_id":"g1"}),
+            true,
+        ),
+        (
+            "task_group.assign",
+            serde_json::json!({"workspace_id":"w1","group_id":"g1"}),
+            true,
+        ),
+    ] {
+        let request: Request = serde_json::from_value(serde_json::json!({
+            "id":"group-routing", "method":name, "params":params,
+        }))
+        .unwrap();
+        assert_eq!(crate::api::api_method_name(&request.method), name);
+        assert_eq!(crate::api::request_changes_ui(&request), changes_ui);
+        assert!(crate::server::client_commands::supports_client_shell_method(&request.method));
+    }
+}

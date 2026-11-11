@@ -182,7 +182,12 @@ impl App {
     }
 
     fn git_refresh_demand(&self) -> GitStatusRefreshDemand {
-        let mut demand = GitStatusRefreshDemand::default();
+        // Git HEAD identity is shared runtime metadata, also consumed by Navigator.
+        // Keep it fresh independently of configurable sidebar tokens.
+        let mut demand = GitStatusRefreshDemand {
+            branch: true,
+            ahead_behind: false,
+        };
         for token in self.state.sidebar_spaces.rows.iter().flatten() {
             match token.parts().0 {
                 crate::config::SpaceSidebarToken::Branch => demand.branch = true,
@@ -341,6 +346,7 @@ mod tests {
             fingerprint: None,
             retry_after: Some(Instant::now() + std::time::Duration::from_secs(30)),
             snapshot: crate::workspace::WorkspaceGitStatusSnapshot {
+                detached: false,
                 auto_label: "/".into(),
                 branch: Some("main".into()),
                 ahead_behind: None,
@@ -430,6 +436,7 @@ mod tests {
             fingerprint: None,
             retry_after: None,
             snapshot: crate::workspace::WorkspaceGitStatusSnapshot {
+                detached: false,
                 auto_label: "stale".into(),
                 branch: None,
                 ahead_behind: None,
@@ -528,7 +535,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn restored_workspace_metadata_refresh_runs_once_without_sidebar_git_tokens() {
+    async fn restored_workspace_metadata_refresh_starts_without_sidebar_git_tokens() {
         let repo =
             std::env::temp_dir().join(format!("herdr-restored-git-refresh-{}", std::process::id()));
         let nested = repo.join("nested");
@@ -577,7 +584,7 @@ mod tests {
         assert!(workspace.worktree_space.is_none());
         assert!(app.pending_restored_worktree_spaces.is_empty());
         assert!(app.state.session_dirty);
-        assert_eq!(app.git_refresh_deadline(), None);
+        assert!(app.git_refresh_deadline().is_some());
         app.start_git_status_refresh_if_due(Instant::now());
         assert!(!app.git_refresh_in_flight);
         app.state.assert_invariants_for_test();
@@ -585,7 +592,7 @@ mod tests {
     }
 
     #[test]
-    fn due_git_refresh_does_not_start_without_sidebar_consumer() {
+    fn due_git_refresh_starts_for_shared_head_identity() {
         let mut config = crate::config::Config::default();
         config.ui.sidebar.spaces.rows = vec![vec![crate::config::SpaceSidebarToken::Workspace]];
         let mut app = test_app(&config);
@@ -595,8 +602,7 @@ mod tests {
 
         app.start_git_status_refresh_if_due(now);
 
-        assert!(!app.git_refresh_in_flight);
-        assert!(app.event_rx.try_recv().is_err());
+        assert!(app.git_refresh_in_flight);
     }
 
     #[test]
@@ -652,11 +658,14 @@ mod tests {
     }
 
     #[test]
-    fn git_refresh_demand_matches_sidebar_rows() {
+    fn git_refresh_keeps_head_identity_without_sidebar_git_tokens() {
         let cases = [
             (
                 crate::config::SpaceSidebarToken::Workspace,
-                GitStatusRefreshDemand::default(),
+                GitStatusRefreshDemand {
+                    branch: true,
+                    ahead_behind: false,
+                },
             ),
             (
                 crate::config::SpaceSidebarToken::Branch,
@@ -668,7 +677,7 @@ mod tests {
             (
                 crate::config::SpaceSidebarToken::GitStatus,
                 GitStatusRefreshDemand {
-                    branch: false,
+                    branch: true,
                     ahead_behind: true,
                 },
             ),
@@ -690,7 +699,7 @@ mod tests {
     }
 
     #[test]
-    fn unnamed_linked_worktree_does_not_force_periodic_branch_refresh() {
+    fn unnamed_linked_worktree_refreshes_shared_head_identity() {
         let mut config = crate::config::Config::default();
         config.ui.sidebar.spaces.rows = vec![vec![crate::config::SpaceSidebarToken::Workspace]];
         let mut app = test_app(&config);
@@ -705,11 +714,11 @@ mod tests {
         });
         app.state.workspaces.push(child);
 
-        assert_eq!(app.git_refresh_deadline(), None);
+        assert!(app.git_refresh_deadline().is_some());
     }
 
     #[test]
-    fn custom_named_linked_worktree_does_not_require_branch_refresh() {
+    fn custom_named_linked_worktree_refreshes_shared_head_identity() {
         let mut config = crate::config::Config::default();
         config.ui.sidebar.spaces.rows = vec![vec![crate::config::SpaceSidebarToken::Workspace]];
         let mut app = test_app(&config);
@@ -723,7 +732,7 @@ mod tests {
         });
         app.state.workspaces.push(child);
 
-        assert_eq!(app.git_refresh_deadline(), None);
+        assert!(app.git_refresh_deadline().is_some());
     }
 
     #[test]

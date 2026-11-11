@@ -328,10 +328,28 @@ pub(super) fn navigator_rows(
                     .or_insert_with(Vec::new)
                     .push(pane);
             }
+            // Group membership is endpoint-local. Ambiguous membership keeps the
+            // branch visible rather than choosing a group from malformed metadata.
+            let mut group_labels = HashMap::new();
+            for group in &snapshot.task_groups {
+                for workspace_id in &group.workspace_ids {
+                    group_labels
+                        .entry(workspace_id.as_str())
+                        .and_modify(|label| *label = None)
+                        .or_insert(Some(group.label.as_str()));
+                }
+            }
+            let detached_workspaces = snapshot
+                .detached_workspace_ids
+                .iter()
+                .map(String::as_str)
+                .collect::<HashSet<_>>();
             for workspace in &snapshot.workspaces {
+                let detached = detached_workspaces.contains(workspace.workspace_id.as_str());
                 let workspace_matches = endpoint_query_matches
                     || text(&workspace.label)
-                    || workspace.branch.as_deref().is_some_and(text);
+                    || workspace.branch.as_deref().is_some_and(text)
+                    || (detached && text("detached HEAD"));
                 let mut children = Vec::new();
                 let workspace_tabs = tabs_by_workspace
                     .get(workspace.workspace_id.as_str())
@@ -427,7 +445,15 @@ pub(super) fn navigator_rows(
                     endpoint_rows.push(ClientNavigatorRow {
                         depth: depth_offset,
                         label: workspace.label.clone(),
-                        meta: workspace.branch.clone().unwrap_or_default(),
+                        meta: navigator_branch_meta(
+                            workspace.branch.as_deref(),
+                            detached,
+                            group_labels
+                                .get(workspace.workspace_id.as_str())
+                                .copied()
+                                .flatten(),
+                        )
+                        .to_owned(),
                         detail: workspace.new_workspace_cwd.clone(),
                         agent: None,
                         status: None,
@@ -462,6 +488,31 @@ pub(super) fn navigator_rows(
         }
     }
     rows
+}
+
+// Presentation only: never infer a Git branch from a custom workspace label.
+// Keep exact spelling, including case and whitespace. HEAD and detached status
+// text are not branch names and must remain visible even in a same-named group.
+fn navigator_branch_meta<'a>(
+    branch: Option<&'a str>,
+    detached: bool,
+    group_label: Option<&str>,
+) -> &'a str {
+    if detached {
+        return "detached HEAD";
+    }
+    let Some(branch) = branch else {
+        return "";
+    };
+    if !branch.is_empty()
+        && branch != "HEAD"
+        && !branch.chars().any(char::is_whitespace)
+        && group_label == Some(branch)
+    {
+        ""
+    } else {
+        branch
+    }
 }
 
 pub(super) fn navigator_selected_index(

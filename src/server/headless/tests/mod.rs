@@ -4788,6 +4788,7 @@ fn unchanged_git_refresh_does_not_request_headless_render() {
 
     let changed = server.handle_internal_event_with_forwarding(AppEvent::GitStatusRefreshed {
         results: vec![crate::workspace::WorkspaceGitStatus {
+            detached: false,
             workspace_id,
             resolved_identity_cwd: cwd.clone(),
             status_cache_key: cwd,
@@ -4846,6 +4847,7 @@ fn changed_git_refresh_requests_headless_render() {
 
     let changed = server.handle_internal_event_with_forwarding(AppEvent::GitStatusRefreshed {
         results: vec![crate::workspace::WorkspaceGitStatus {
+            detached: false,
             workspace_id,
             resolved_identity_cwd: cwd.clone(),
             status_cache_key: cwd,
@@ -8332,4 +8334,140 @@ fn no_handle_internal_event_bypass_in_module() {
              handle_internal_event_with_forwarding (bypass risk):\n  {}",
         bypass_lines.join("\n  ")
     );
+}
+
+#[tokio::test]
+async fn client_shell_pairs_detached_head_attach_changes_and_clear_with_snapshots() {
+    let mut server = test_headless_server();
+    server.app.state.workspaces = vec![crate::workspace::Workspace::test_new("first")];
+    server.app.state.active = Some(0);
+    server.app.state.workspaces[0].cached_git_branch = None;
+    server.app.state.workspaces[0].cache_git_head_observation(true, &server.app.state.terminals);
+    let workspace_id = server.app.public_workspace_id(0);
+    let (writer, control_rx, _render_rx) = test_client_writer();
+    assert!(
+        server.handle_server_event(ServerEvent::ClientShellConnected {
+            surface_reuse: false,
+            surface_delta: false,
+            surface_scroll: false,
+            client_id: 178,
+            surface_cols: 80,
+            surface_rows: 23,
+            cell_width_px: 0,
+            cell_height_px: 0,
+            pixel_mouse: false,
+            direct_graphics: false,
+            endpoint_keybindings: false,
+            mouse_capture: false,
+            surface_active: false,
+            writer,
+        })
+    );
+    let read_heads = || {
+        let ServerMessage::EndpointControl { kind, data } = read_server_message(
+            control_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("Git HEAD companion"),
+        ) else {
+            panic!("expected optional Git HEAD control");
+        };
+        assert_eq!(kind, protocol::endpoint::WORKSPACE_GIT_HEADS_KIND);
+        let heads: protocol::endpoint::EndpointWorkspaceGitHeads =
+            serde_json::from_str(&data).unwrap();
+        let snapshot = client_shell_snapshot(&control_rx);
+        assert_eq!(heads.boot_id, snapshot.boot_id);
+        assert_eq!(heads.revision, snapshot.revision);
+        assert!(snapshot.detached_workspace_ids.is_empty());
+        assert_eq!(snapshot.workspaces[0].branch, None);
+        heads
+    };
+    let attached = read_heads();
+    assert_eq!(attached.detached_workspace_ids, vec![workspace_id.clone()]);
+    server.app.state.workspaces[0].cached_git_detached = false;
+    server.render_and_stream();
+    let cleared = read_heads();
+    assert!(cleared.revision > attached.revision);
+    assert!(cleared.detached_workspace_ids.is_empty());
+    server.app.state.workspaces[0].cache_git_head_observation(true, &server.app.state.terminals);
+    server.render_and_stream();
+    let detached = read_heads();
+    assert!(detached.revision > cleared.revision);
+    assert_eq!(detached.detached_workspace_ids, vec![workspace_id]);
+}
+
+#[tokio::test]
+async fn client_shell_pairs_task_group_attach_rename_membership_and_clear_with_snapshots() {
+    let mut server = test_headless_server();
+    server.app.state.workspaces = vec![
+        crate::workspace::Workspace::test_new("first"),
+        crate::workspace::Workspace::test_new("second"),
+    ];
+    server.app.state.active = Some(0);
+    let first_id = server.app.public_workspace_id(0);
+    let second_id = server.app.public_workspace_id(1);
+    server.app.state.task_groups = vec![crate::task_groups::TaskGroup {
+        id: "group-one".into(),
+        label: "Ship feature".into(),
+        workspace_ids: vec![first_id.clone()],
+    }];
+    let (writer, control_rx, _render_rx) = test_client_writer();
+    assert!(
+        server.handle_server_event(ServerEvent::ClientShellConnected {
+            surface_reuse: false,
+            surface_delta: false,
+            surface_scroll: false,
+            client_id: 177,
+            surface_cols: 80,
+            surface_rows: 23,
+            cell_width_px: 0,
+            cell_height_px: 0,
+            pixel_mouse: false,
+            direct_graphics: false,
+            endpoint_keybindings: false,
+            mouse_capture: false,
+            surface_active: false,
+            writer,
+        })
+    );
+    let read_groups = || {
+        let ServerMessage::EndpointControl { kind, data } = read_server_message(
+            control_rx
+                .recv_timeout(Duration::from_secs(1))
+                .expect("task group companion"),
+        ) else {
+            panic!("expected optional task group control");
+        };
+        assert_eq!(kind, protocol::endpoint::TASK_GROUPS_KIND);
+        let groups: protocol::endpoint::EndpointTaskGroups = serde_json::from_str(&data).unwrap();
+        let snapshot = client_shell_snapshot(&control_rx);
+        assert_eq!(groups.boot_id, snapshot.boot_id);
+        assert_eq!(groups.revision, snapshot.revision);
+        assert!(
+            snapshot.task_groups.is_empty(),
+            "core snapshot remains frozen"
+        );
+        (groups, snapshot)
+    };
+    let (attached, initial_snapshot) = read_groups();
+    assert_eq!(attached.task_groups, server.app.state.task_groups);
+    assert_eq!(attached.task_groups[0].workspace_ids, vec![first_id]);
+    assert_eq!(initial_snapshot.workspaces[1].workspace_id, second_id);
+
+    server.app.state.task_groups[0].label = "Ship renamed feature".into();
+    server.render_and_stream();
+    let (renamed, _) = read_groups();
+    assert!(renamed.revision > attached.revision);
+    assert_eq!(renamed.task_groups[0].label, "Ship renamed feature");
+
+    server.app.state.task_groups[0].workspace_ids = vec![second_id.clone()];
+    server.render_and_stream();
+    let (reassigned, _) = read_groups();
+    assert!(reassigned.revision > renamed.revision);
+    assert_eq!(reassigned.task_groups[0].workspace_ids, vec![second_id]);
+
+    server.app.state.task_groups.clear();
+    server.render_and_stream();
+    let (cleared, _) = read_groups();
+    assert!(cleared.revision > reassigned.revision);
+    assert!(cleared.task_groups.is_empty());
 }

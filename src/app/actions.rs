@@ -691,6 +691,7 @@ impl AppState {
         for idx in close_indices.iter().rev() {
             self.workspaces.remove(*idx);
         }
+        self.reconcile_task_groups();
         self.remove_unattached_terminal_ids(terminal_ids);
         if self.workspaces.is_empty() {
             self.active = None;
@@ -884,6 +885,15 @@ impl AppState {
 
     pub(crate) fn workspace_close_indices(&self, ws_idx: usize) -> Vec<usize> {
         let group = self.workspace_group_close_indices(ws_idx);
+        // A task boundary disables implicit repository-wide closure. Keep the
+        // explicit Git-group API separate from the ordinary Close action.
+        if group.iter().any(|index| {
+            self.workspaces
+                .get(*index)
+                .is_some_and(|workspace| self.workspace_task_group(&workspace.id).is_some())
+        }) {
+            return vec![ws_idx];
+        }
         if group.iter().any(|index| {
             *index != ws_idx
                 && self.workspaces[*index]
@@ -1372,6 +1382,9 @@ impl AppState {
             }
             if ws.cached_git_status_key != result.status_cache_key {
                 ws.cached_git_status_key = result.status_cache_key;
+            }
+            if result.demand.branch {
+                changed |= ws.cache_git_head_observation(result.detached, &self.terminals);
             }
             if result.demand.branch && ws.cached_git_branch != result.branch {
                 ws.cached_git_branch = result.branch;
@@ -2087,6 +2100,7 @@ impl AppState {
                 .map(|ws| ws.id.clone());
             let selected_workspace_id = self.workspaces.get(self.selected).map(|ws| ws.id.clone());
             self.workspaces.remove(ws_idx);
+            self.reconcile_task_groups();
             self.remove_unattached_terminal_ids(workspace_terminal_ids);
             if self.workspaces.is_empty() {
                 self.active = None;
@@ -2578,6 +2592,7 @@ mod tests {
         let changed = state.apply_workspace_git_statuses(
             &terminal_runtimes,
             vec![WorkspaceGitStatus {
+                detached: false,
                 workspace_id: first_id,
                 resolved_identity_cwd: first_cwd.clone(),
                 status_cache_key: first_cwd,
@@ -2637,6 +2652,64 @@ mod tests {
     }
 
     #[test]
+    fn detached_head_only_changes_are_dirty_and_clear_without_a_branch() {
+        let mut state = app_with_workspaces(&["one"]);
+        let cwd = state.workspaces[0].resolved_identity_cwd().unwrap();
+        state.workspaces[0].cached_auto_label = "one".into();
+        state.workspaces[0].cached_git_branch = None;
+        state.workspaces[0].cached_git_detached = false;
+        let terminal_runtimes = crate::terminal::TerminalRuntimeRegistry::new();
+        for detached in [true, false] {
+            let result = WorkspaceGitStatus {
+                workspace_id: state.workspaces[0].id.clone(),
+                resolved_identity_cwd: cwd.clone(),
+                status_cache_key: cwd.clone(),
+                demand: crate::workspace::GitStatusRefreshDemand::ALL,
+                auto_label: "one".into(),
+                branch: None,
+                detached,
+                ahead_behind: None,
+                space: None,
+            };
+            assert!(state.apply_workspace_git_statuses(&terminal_runtimes, vec![result.clone()]));
+            assert_eq!(state.workspaces[0].cached_git_detached, detached);
+            assert_eq!(state.workspaces[0].branch(), None);
+            assert!(!state.apply_workspace_git_statuses(&terminal_runtimes, vec![result]));
+        }
+    }
+
+    #[test]
+    fn detached_refresh_rebinding_observation_is_dirty_and_stale_results_cannot_rebind() {
+        let mut state = app_with_workspaces(&["one"]);
+        state.workspaces[0].tabs.clear();
+        state.workspaces[0].cached_auto_label = "one".into();
+        state.workspaces[0].cached_git_branch = None;
+        state.workspaces[0].cache_git_head_observation(true, &state.terminals);
+        state.workspaces[0].identity_cwd = "/new-observed-cwd".into();
+        assert!(!state.workspaces[0].git_head_is_detached_from_terminals(&state.terminals));
+        let terminal_runtimes = crate::terminal::TerminalRuntimeRegistry::new();
+        let result = WorkspaceGitStatus {
+            workspace_id: state.workspaces[0].id.clone(),
+            resolved_identity_cwd: "/new-observed-cwd".into(),
+            status_cache_key: "/new-observed-cwd".into(),
+            demand: crate::workspace::GitStatusRefreshDemand::ALL,
+            auto_label: "one".into(),
+            branch: None,
+            detached: true,
+            ahead_behind: None,
+            space: None,
+        };
+        assert!(state.apply_workspace_git_statuses(&terminal_runtimes, vec![result.clone()]));
+        assert!(state.workspaces[0].git_head_is_detached_from_terminals(&state.terminals));
+        assert!(!state.apply_workspace_git_statuses(&terminal_runtimes, vec![result.clone()]));
+        let marker = state.workspaces[0].cached_git_observed_cwd.clone();
+        state.workspaces[0].identity_cwd = "/later-cwd".into();
+        assert!(!state.apply_workspace_git_statuses(&terminal_runtimes, vec![result]));
+        assert_eq!(state.workspaces[0].cached_git_observed_cwd, marker);
+        assert!(!state.workspaces[0].git_head_is_detached_from_terminals(&state.terminals));
+    }
+
+    #[test]
     fn apply_workspace_git_statuses_ignores_stale_cwd() {
         let mut state = app_with_workspaces(&["one"]);
         let workspace_id = state.workspaces[0].id.clone();
@@ -2647,6 +2720,7 @@ mod tests {
         let changed = state.apply_workspace_git_statuses(
             &terminal_runtimes,
             vec![WorkspaceGitStatus {
+                detached: true,
                 workspace_id,
                 resolved_identity_cwd: std::path::PathBuf::from("/definitely/not/current"),
                 status_cache_key: std::path::PathBuf::from("/definitely/not/current"),
@@ -2659,6 +2733,7 @@ mod tests {
         );
 
         assert!(!changed);
+        assert!(!state.workspaces[0].cached_git_detached);
         assert_eq!(state.workspaces[0].branch().as_deref(), Some("old"));
         assert_eq!(state.workspaces[0].git_ahead_behind(), Some((1, 0)));
     }
@@ -2675,6 +2750,7 @@ mod tests {
         let changed = state.apply_workspace_git_statuses(
             &terminal_runtimes,
             vec![WorkspaceGitStatus {
+                detached: false,
                 workspace_id,
                 resolved_identity_cwd: cwd.clone(),
                 status_cache_key: cwd,
@@ -2705,6 +2781,7 @@ mod tests {
         let changed = state.apply_workspace_git_statuses(
             &terminal_runtimes,
             vec![WorkspaceGitStatus {
+                detached: false,
                 workspace_id,
                 resolved_identity_cwd: cwd.clone(),
                 status_cache_key: cwd,
@@ -2733,6 +2810,7 @@ mod tests {
         let changed = state.apply_workspace_git_statuses(
             &terminal_runtimes,
             vec![WorkspaceGitStatus {
+                detached: false,
                 workspace_id,
                 resolved_identity_cwd: cwd.clone(),
                 status_cache_key: cwd,

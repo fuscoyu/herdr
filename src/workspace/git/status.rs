@@ -118,6 +118,7 @@ pub fn git_status_snapshot_for_cwd_with_demand(
         .or_else(|| repo_context(cwd));
     let Some(repository_context) = repository_context else {
         let snapshot = WorkspaceGitStatusSnapshot {
+            detached: false,
             auto_label: fallback_label_from_cwd(cwd),
             branch: None,
             ahead_behind: None,
@@ -143,6 +144,9 @@ pub fn git_status_snapshot_for_cwd_with_demand(
             .flatten()
             .map(str::to_string);
         let snapshot = WorkspaceGitStatusSnapshot {
+            detached: fingerprint
+                .as_ref()
+                .is_some_and(|head| matches!(head.head, GitHeadIdentity::Detached { .. })),
             auto_label,
             branch,
             ahead_behind: None,
@@ -161,6 +165,7 @@ pub fn git_status_snapshot_for_cwd_with_demand(
     let Some(fingerprint) = fingerprint(repository_context, true) else {
         return (
             WorkspaceGitStatusSnapshot {
+                detached: false,
                 auto_label,
                 branch: None,
                 ahead_behind: None,
@@ -173,6 +178,7 @@ pub fn git_status_snapshot_for_cwd_with_demand(
 
     if let Some(cached) = cached.filter(|entry| entry.fingerprint.as_ref() == Some(&fingerprint)) {
         let snapshot = WorkspaceGitStatusSnapshot {
+            detached: matches!(fingerprint.head, GitHeadIdentity::Detached { .. }),
             auto_label,
             branch,
             ahead_behind: cached.snapshot.ahead_behind,
@@ -193,6 +199,7 @@ pub fn git_status_snapshot_for_cwd_with_demand(
         .zip(fingerprint.upstream_oid())
         .and_then(|(head_oid, upstream_oid)| git_ahead_behind_between(cwd, head_oid, upstream_oid));
     let snapshot = WorkspaceGitStatusSnapshot {
+        detached: matches!(fingerprint.head, GitHeadIdentity::Detached { .. }),
         auto_label,
         branch,
         ahead_behind,
@@ -260,7 +267,7 @@ fn read_head_identity(info: &GitWorktreeInfo, reftable: bool) -> Option<GitHeadI
 }
 
 fn read_head_identity_from_git(info: &GitWorktreeInfo) -> Option<GitHeadIdentity> {
-    if let Some(full_ref) = git_symbolic_head_full(&info.repo_root) {
+    if let Some(full_ref) = git_symbolic_head_full(&info.repo_root)? {
         let short_name = full_ref.strip_prefix("refs/heads/")?.to_string();
         let oid = git_rev_parse_verify(&info.repo_root, &full_ref);
         return Some(GitHeadIdentity::Branch {
@@ -286,9 +293,10 @@ fn read_head_identity_from_files(info: &GitWorktreeInfo) -> Option<GitHeadIdenti
         });
     }
 
-    (!head.is_empty()).then(|| GitHeadIdentity::Detached {
-        oid: head.to_string(),
-    })
+    ((head.len() == 40 || head.len() == 64) && head.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .then(|| GitHeadIdentity::Detached {
+            oid: head.to_string(),
+        })
 }
 
 fn read_upstream(repo: &mut RepoContext, branch: &str) -> Option<GitUpstreamIdentity> {
@@ -351,6 +359,37 @@ mod tests {
     };
 
     #[cfg(target_os = "linux")]
+    #[test]
+    fn head_refresh_distinguishes_detached_unknown_and_unborn_branch() {
+        let root = temp_test_dir("explicit-head-state");
+        write_fake_tracked_repo(&root);
+        let demand = GitStatusRefreshDemand {
+            branch: true,
+            ahead_behind: false,
+        };
+        let (branch, _) = git_status_snapshot_for_cwd_with_demand(&root, None, demand);
+        assert_eq!(branch.branch.as_deref(), Some("main"));
+        assert!(!branch.detached);
+        std::fs::write(
+            root.join(".git/HEAD"),
+            "1111111111111111111111111111111111111111\n",
+        )
+        .unwrap();
+        let (detached, cache) = git_status_snapshot_for_cwd_with_demand(&root, None, demand);
+        assert!(detached.detached);
+        assert_eq!(detached.branch, None);
+        assert_eq!(detached.ahead_behind, None);
+        std::fs::write(root.join(".git/HEAD"), "broken HEAD\n").unwrap();
+        let (unknown, _) = git_status_snapshot_for_cwd_with_demand(&root, cache.as_ref(), demand);
+        assert!(!unknown.detached);
+        assert_eq!(unknown.branch, None);
+        std::fs::write(root.join(".git/HEAD"), "ref: refs/heads/unborn\n").unwrap();
+        let (unborn, _) = git_status_snapshot_for_cwd_with_demand(&root, None, demand);
+        assert!(!unborn.detached);
+        assert_eq!(unborn.branch.as_deref(), Some("unborn"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn cache_key_from_space_preserves_non_utf8_checkout_path() {
         use std::os::unix::ffi::OsStringExt;
@@ -456,6 +495,7 @@ mod tests {
             fingerprint: Some(fingerprint),
             retry_after: None,
             snapshot: WorkspaceGitStatusSnapshot {
+                detached: false,
                 auto_label: "repo".into(),
                 branch: Some("main".into()),
                 ahead_behind: Some((2, 1)),
@@ -481,6 +521,7 @@ mod tests {
             fingerprint: Some(fingerprint),
             retry_after: None,
             snapshot: WorkspaceGitStatusSnapshot {
+                detached: false,
                 auto_label: "repo".into(),
                 branch: Some("main".into()),
                 ahead_behind: Some((4, 0)),
@@ -516,6 +557,7 @@ mod tests {
             fingerprint: Some(fingerprint),
             retry_after: None,
             snapshot: WorkspaceGitStatusSnapshot {
+                detached: false,
                 auto_label: "repo".into(),
                 branch: Some("main".into()),
                 ahead_behind: Some((0, 3)),

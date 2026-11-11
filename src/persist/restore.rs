@@ -422,6 +422,8 @@ fn restore_workspace(
             cached_auto_label: crate::workspace::fallback_label_from_cwd(&snap.identity_cwd),
             cached_git_status_key: snap.identity_cwd.clone(),
             cached_git_branch: None,
+            cached_git_detached: false,
+            cached_git_observed_cwd: None,
             cached_git_ahead_behind: None,
             cached_git_space: None,
             worktree_space: snap.worktree_space.clone(),
@@ -1567,6 +1569,7 @@ mod tests {
             sidebar_width: None,
             sidebar_section_split: None,
             collapsed_space_keys: Default::default(),
+            task_groups: Vec::new(),
         };
         let (events, _event_rx) = mpsc::channel(4);
 
@@ -1662,6 +1665,7 @@ mod tests {
             sidebar_width: None,
             sidebar_section_split: None,
             collapsed_space_keys: Default::default(),
+            task_groups: Vec::new(),
         };
         let (events, _event_rx) = mpsc::channel(4);
 
@@ -1771,6 +1775,7 @@ mod tests {
             sidebar_width: None,
             sidebar_section_split: None,
             collapsed_space_keys: Default::default(),
+            task_groups: Vec::new(),
         };
         let (events, _event_rx) = mpsc::channel(4);
 
@@ -1883,6 +1888,7 @@ mod tests {
             sidebar_width: None,
             sidebar_section_split: None,
             collapsed_space_keys: Default::default(),
+            task_groups: Vec::new(),
         };
         let (events, _event_rx) = mpsc::channel(4);
 
@@ -2223,6 +2229,7 @@ mod tests {
             sidebar_width: Some(26),
             sidebar_section_split: Some(0.5),
             collapsed_space_keys: Default::default(),
+            task_groups: Vec::new(),
         };
         history.layout_fingerprint = super::super::snapshot::layout_fingerprint(&snapshot);
         (snapshot, history)

@@ -794,6 +794,8 @@ pub struct AppState {
     pub(crate) pane_id_aliases: std::collections::HashMap<u32, PaneId>,
     pub(crate) public_pane_id_aliases: std::collections::HashMap<String, PaneId>,
     pub workspaces: Vec<Workspace>,
+    /// Explicit task organization, independent of Git repository/worktree provenance.
+    pub task_groups: Vec<crate::task_groups::TaskGroup>,
     pub active: Option<usize>,
     pub(crate) previous_pane_focus: Option<PaneFocusTarget>,
     pub selected: usize,
@@ -1040,6 +1042,7 @@ impl AppState {
             pane_id_aliases: std::collections::HashMap::new(),
             public_pane_id_aliases: std::collections::HashMap::new(),
             workspaces: Vec::new(),
+            task_groups: Vec::new(),
             active: None,
             previous_pane_focus: None,
             selected: 0,
@@ -1152,6 +1155,27 @@ impl AppState {
     }
 
     pub fn assert_invariants_for_test(&self) {
+        let mut group_ids = std::collections::HashSet::new();
+        let mut group_members = std::collections::HashSet::new();
+        for group in &self.task_groups {
+            assert!(
+                group_ids.insert(&group.id),
+                "duplicate task group id {}",
+                group.id
+            );
+            for member in &group.workspace_ids {
+                assert!(
+                    self.workspaces
+                        .iter()
+                        .any(|workspace| &workspace.id == member),
+                    "orphan task group member {member}"
+                );
+                assert!(
+                    group_members.insert(member),
+                    "workspace {member} belongs to multiple task groups"
+                );
+            }
+        }
         if self.workspaces.is_empty() {
             assert!(
                 self.active.is_none(),

@@ -10,6 +10,7 @@ pub(crate) mod plugins;
 pub(super) mod responses;
 mod session;
 mod tabs;
+mod task_groups;
 mod workspaces;
 mod worktrees;
 
@@ -1059,6 +1060,19 @@ impl App {
                 );
             }
             Method::SessionSnapshot(_) => return self.handle_session_snapshot(request.id),
+            Method::TaskGroupList(_) => return self.handle_task_group_list(request.id),
+            Method::TaskGroupCreate(params) => {
+                return self.handle_task_group_create(request.id, params);
+            }
+            Method::TaskGroupRename(params) => {
+                return self.handle_task_group_rename(request.id, params);
+            }
+            Method::TaskGroupDelete(params) => {
+                return self.handle_task_group_delete(request.id, params);
+            }
+            Method::TaskGroupAssign(params) => {
+                return self.handle_task_group_assign(request.id, params);
+            }
             Method::WorkspaceList(_) => return self.handle_workspace_list(request.id),
             Method::WorkspaceGet(target) => return self.handle_workspace_get(request.id, target),
             Method::WorkspaceCreate(params) => {

@@ -117,6 +117,7 @@ impl ClientShellState {
                         index,
                         indented: false,
                         last_child: false,
+                        task_group: false,
                     })
                     .collect()
             } else {
