@@ -44,7 +44,7 @@ impl AppState {
             .task_groups
             .iter_mut()
             .find(|group| group.id == group_id)
-            .ok_or_else(|| format!("task group {group_id} not found"))?;
+            .ok_or_else(|| format!("group {group_id} not found"))?;
         let changed = group.label != label;
         group.label = label;
         let result = group.clone();
@@ -60,7 +60,7 @@ impl AppState {
             .task_groups
             .iter()
             .position(|group| group.id == group_id)
-            .ok_or_else(|| format!("task group {group_id} not found"))?;
+            .ok_or_else(|| format!("group {group_id} not found"))?;
         self.task_groups.remove(index);
         self.mark_session_dirty();
         Ok(())
@@ -81,7 +81,7 @@ impl AppState {
         }
         if let Some(group_id) = group_id {
             if !self.task_groups.iter().any(|group| group.id == group_id) {
-                return Err(format!("task group {group_id} not found"));
+                return Err(format!("group {group_id} not found"));
             }
         }
         if self

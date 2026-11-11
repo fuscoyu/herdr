@@ -133,7 +133,7 @@ fn group_not_found(id: String, group_id: &str) -> String {
     encode_error(
         id,
         "task_group_not_found",
-        format!("task group {group_id} not found"),
+        format!("group {group_id} not found"),
     )
 }
 

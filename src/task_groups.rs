@@ -14,12 +14,10 @@ pub struct TaskGroup {
 pub(crate) fn normalized_label(label: String) -> Result<String, String> {
     let label = label.trim();
     if label.is_empty() {
-        return Err("task group label must not be empty".into());
+        return Err("group label must not be empty".into());
     }
     if label.chars().any(char::is_control) || label.chars().count() > 128 {
-        return Err(
-            "task group label must be at most 128 characters without control characters".into(),
-        );
+        return Err("group label must be at most 128 characters without control characters".into());
     }
     Ok(label.to_owned())
 }

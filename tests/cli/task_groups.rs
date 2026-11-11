@@ -189,6 +189,8 @@ fn task_group_cli_help_and_invalid_arguments_work_without_a_server() {
     }
     let help = run_cli(&socket_path, &["group", "--help"]);
     assert!(help.status.success());
-    assert!(String::from_utf8_lossy(&help.stdout).contains("Organize workspaces"));
+    let help_text = String::from_utf8_lossy(&help.stdout);
+    assert!(help_text.contains("Organize workspaces into named groups"));
+    assert!(!help_text.contains("task group"));
     cleanup_test_base(&base);
 }

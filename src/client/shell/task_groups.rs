@@ -97,7 +97,7 @@ impl ClientShellState {
 
     pub(super) fn begin_new_task_group(&mut self, workspace_id: Option<String>) {
         self.overlay = Some(ClientShellOverlay::Rename(ClientRenameOverlay {
-            title: "new task group",
+            title: "new group",
             input: TextEditor::new("", false),
             target: ClientRenameTarget::NewTaskGroup { workspace_id },
         }));
@@ -168,7 +168,7 @@ impl ClientShellState {
                         .find(|group| group.id == group_id)
                 }) {
                     self.overlay = Some(ClientShellOverlay::Rename(ClientRenameOverlay {
-                        title: "rename task group",
+                        title: "rename group",
                         input: TextEditor::new(&group.label, false),
                         target: ClientRenameTarget::TaskGroup { group_id },
                     }));

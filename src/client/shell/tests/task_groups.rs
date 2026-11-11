@@ -254,6 +254,36 @@ fn task_groups_render_headers_and_member_repository_labels_without_workspace_hit
 }
 
 #[test]
+fn task_groups_user_facing_menus_use_group_labels() {
+    let mut state = task_state();
+    state.open_workspace_context_menu("bots_a".into(), 0, 0);
+    let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
+        panic!("workspace menu");
+    };
+    let labels = menu
+        .items()
+        .into_iter()
+        .map(|item| item.label)
+        .collect::<Vec<_>>();
+    for label in ["New group...", "Move to group...", "Remove from group"] {
+        assert!(labels.iter().any(|actual| actual == label));
+    }
+    assert!(labels.iter().all(|label| !label.contains("task group")));
+
+    state.open_task_group_context_menu("a".into(), 0, 0);
+    let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
+        panic!("group menu");
+    };
+    assert!(menu.items().iter().any(|item| item.label == "Rename group"));
+
+    state.open_task_groups_context_menu(2, 15);
+    let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
+        panic!("spaces menu");
+    };
+    assert_eq!(menu.items()[0].label, "New group...");
+}
+
+#[test]
 fn task_groups_context_actions_create_move_remove_rename_and_delete_only_metadata() {
     use crate::api::schema::Method;
     let mut state = task_state();
@@ -262,6 +292,7 @@ fn task_groups_context_actions_create_move_remove_rename_and_delete_only_metadat
     let Some(ClientShellOverlay::Rename(rename)) = state.overlay.as_mut() else {
         panic!("create input");
     };
+    assert_eq!(rename.title, "new group");
     rename.input = TextEditor::new(" New task ", false);
     let mut created = ClientShellInput::default();
     state.save_rename_overlay(&mut created);
@@ -293,6 +324,7 @@ fn task_groups_context_actions_create_move_remove_rename_and_delete_only_metadat
     let Some(ClientShellOverlay::Rename(rename)) = state.overlay.as_mut() else {
         panic!("rename input");
     };
+    assert_eq!(rename.title, "rename group");
     rename.input = TextEditor::new("Renamed", false);
     let mut renamed = ClientShellInput::default();
     state.save_rename_overlay(&mut renamed);

@@ -49,7 +49,7 @@ impl ClientContextMenuOverlay {
                 ),
             ],
             ClientContextMenuTarget::TaskGroups => {
-                vec![item("New task group...", Action::NewTaskGroup)]
+                vec![item("New group...", Action::NewTaskGroup)]
             }
             ClientContextMenuTarget::TaskGroup {
                 collapsed,
@@ -62,7 +62,7 @@ impl ClientContextMenuOverlay {
                     Action::ToggleGroup,
                 )];
                 if *can_rename {
-                    items.push(item("Rename task group", Action::Rename));
+                    items.push(item("Rename group", Action::Rename));
                 }
                 if *can_delete {
                     items.push(item(
@@ -121,13 +121,13 @@ impl ClientContextMenuOverlay {
         } = &self.target
         {
             if *can_create_task_group {
-                items.push(item("New task group...", Action::NewTaskGroup));
+                items.push(item("New group...", Action::NewTaskGroup));
             }
             if *can_assign_task_group && *has_task_groups {
-                items.push(item("Move to task group...", Action::ChooseTaskGroup));
+                items.push(item("Move to group...", Action::ChooseTaskGroup));
             }
             if *can_assign_task_group && *assigned_task_group {
-                items.push(item("Remove from task group", Action::RemoveFromTaskGroup));
+                items.push(item("Remove from group", Action::RemoveFromTaskGroup));
             }
         }
         items

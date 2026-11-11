@@ -172,7 +172,9 @@ herdr workspace create --cwd ~/project --label api --no-focus
 
 A workspace is a top-level project or work context. Creating one also creates its first tab and root pane. The JSON response exposes their IDs as `.result.workspace.workspace_id`, `.result.tab.tab_id`, and `.result.root_pane.pane_id`.
 
-## Task groups
+## Groups
+
+The spaces list remains the default view. Create a Group within that list and add worktree workspaces from one or more repositories; no separate Space container is introduced.
 
 ```bash
 herdr group list
@@ -183,13 +185,13 @@ herdr group remove <workspace_id>
 herdr group delete <group_id>
 ```
 
-Task groups collect existing workspaces under a named task, including workspaces from different repositories. Group IDs are stable and scoped to one server session. `create` and `rename` return the group at `.result.group`; `list` returns `.result.groups`, including each group's `workspace_ids`.
+Groups collect existing workspaces under a named task, including workspaces from different repositories. Group IDs are stable and scoped to one server session. `create` and `rename` return the group at `.result.group`; `list` returns `.result.groups`, including each group's `workspace_ids`.
 
-A workspace belongs to at most one task group. `add` moves that workspace from its previous group; `remove` leaves it ungrouped. Deleting a group only removes the grouping: it does not close workspaces or terminals, remove worktrees, or delete branches. Empty groups and membership are saved with the session. This is workspace organization, not filesystem or process isolation; use Git worktrees when tasks need isolated checkouts.
+A workspace belongs to at most one group. `add` moves that workspace from its previous group; `remove` leaves it ungrouped. Deleting a group only removes the grouping: it does not close workspaces or terminals, remove worktrees, or delete branches. Empty groups and membership are saved with the session. This is workspace organization, not filesystem or process isolation; use Git worktrees when tasks need isolated checkouts.
 
 Labels must contain 1–128 characters after trimming and cannot contain control characters. Quote labels containing spaces when creating a group. Use `herdr --machine <label-or-id> group ...` to manage groups on a saved SSH machine.
 
-In the sidebar, right-click a workspace and choose **New task group** to create a group containing only that workspace. Use **Move to task group** or **Remove from task group** to change its membership. Right-click an empty area of the spaces list to create an empty group. Click a group header to collapse or expand it; right-click its header to rename or delete the group while keeping its workspaces. Assigned workspaces are grouped by task independently, even when they share a repository. Unassigned workspaces retain the existing repository grouping.
+In the sidebar, right-click a workspace and choose **New group** to create a group containing only that workspace. Use **Move to group** or **Remove from group** to change its membership. Right-click an empty area of the spaces list to create an empty group. Click a group header to collapse or expand it; right-click its header to rename or delete the group while keeping its workspaces. Assigned workspaces are grouped by task independently, even when they share a repository. Unassigned workspaces retain the existing repository grouping.
 
 ## Worktrees
 

@@ -34,14 +34,14 @@ cli_projection! {
 const LEAVES: [Leaf; 6] = [
     Leaf {
         name: "list",
-        about: "List task groups and their workspace IDs",
+        about: "List groups and their workspace IDs",
         id: "cli:group:list",
         arguments: TaskGroupListProjection::arguments,
         method: |matches| TaskGroupListProjection::from_matches(matches).map(Method::TaskGroupList),
     },
     Leaf {
         name: "create",
-        about: "Create a named task group, optionally with a workspace",
+        about: "Create a named group, optionally with a workspace",
         id: "cli:group:create",
         arguments: TaskGroupCreateProjection::arguments,
         method: |matches| {
@@ -50,7 +50,7 @@ const LEAVES: [Leaf; 6] = [
     },
     Leaf {
         name: "rename",
-        about: "Rename a task group",
+        about: "Rename a group",
         id: "cli:group:rename",
         arguments: TaskGroupRenameProjection::arguments,
         method: |matches| {
@@ -59,7 +59,7 @@ const LEAVES: [Leaf; 6] = [
     },
     Leaf {
         name: "delete",
-        about: "Delete a task group without closing its workspaces",
+        about: "Delete a group without closing its workspaces",
         id: "cli:group:delete",
         arguments: TaskGroupTargetProjection::arguments,
         method: |matches| {
@@ -68,7 +68,7 @@ const LEAVES: [Leaf; 6] = [
     },
     Leaf {
         name: "add",
-        about: "Assign or move a workspace to a task group",
+        about: "Assign or move a workspace to a group",
         id: "cli:group:add",
         arguments: TaskGroupAddProjection::arguments,
         method: |matches| {
@@ -77,7 +77,7 @@ const LEAVES: [Leaf; 6] = [
     },
     Leaf {
         name: "remove",
-        about: "Remove a workspace from its task group",
+        about: "Remove a workspace from its group",
         id: "cli:group:remove",
         arguments: TaskGroupRemoveProjection::arguments,
         method: |matches| {
@@ -88,7 +88,7 @@ const LEAVES: [Leaf; 6] = [
 
 pub(crate) fn command() -> Command {
     Command::new("group")
-        .about("Organize workspaces into named task groups")
+        .about("Organize workspaces into named groups")
         .subcommand_required(true)
         .subcommands(LEAVES.iter().map(Leaf::command))
 }
