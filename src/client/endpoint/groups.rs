@@ -1,17 +1,17 @@
-use crate::protocol::{endpoint::EndpointTaskGroups, ClientShellSnapshot};
+use crate::protocol::{endpoint::EndpointGroups, ClientShellSnapshot};
 
 /// Optional companions belong to one connection, endpoint boot, and snapshot revision.
 /// Keeping this separate from the core snapshot preserves the generation-one codecs.
 #[derive(Clone, Debug, Default)]
-pub(crate) struct TaskGroupProjection {
-    pending: Option<(u64, EndpointTaskGroups)>,
+pub(crate) struct GroupProjection {
+    pending: Option<(u64, EndpointGroups)>,
 }
 
-impl TaskGroupProjection {
+impl GroupProjection {
     pub(crate) fn receive(
         &mut self,
         generation: u64,
-        projection: EndpointTaskGroups,
+        projection: EndpointGroups,
         snapshot_generation: Option<u64>,
         snapshot: Option<&mut ClientShellSnapshot>,
     ) -> bool {
@@ -31,8 +31,8 @@ impl TaskGroupProjection {
                     return false;
                 }
                 if snapshot.revision == projection.revision {
-                    let changed = snapshot.task_groups != projection.task_groups;
-                    snapshot.task_groups = projection.task_groups;
+                    let changed = snapshot.groups != projection.groups;
+                    snapshot.groups = projection.groups;
                     return changed;
                 }
             }
@@ -64,7 +64,7 @@ impl TaskGroupProjection {
             });
         if matches {
             if let Some((_, pending)) = self.pending.take() {
-                snapshot.task_groups = pending.task_groups;
+                snapshot.groups = pending.groups;
             }
         } else if let Some((previous, _)) = previous.filter(|(previous, previous_generation)| {
             *previous_generation == generation
@@ -72,7 +72,7 @@ impl TaskGroupProjection {
                 && previous.revision == snapshot.revision
         }) {
             // A duplicate core snapshot must not discard an already merged companion.
-            snapshot.task_groups.clone_from(&previous.task_groups);
+            snapshot.groups.clone_from(&previous.groups);
         }
         if self
             .pending
@@ -106,11 +106,11 @@ mod tests {
         snapshot
     }
 
-    fn projection(boot_id: &str, revision: u64) -> EndpointTaskGroups {
-        EndpointTaskGroups {
+    fn projection(boot_id: &str, revision: u64) -> EndpointGroups {
+        EndpointGroups {
             boot_id: boot_id.into(),
             revision,
-            task_groups: vec![crate::task_groups::TaskGroup {
+            groups: vec![crate::groups::Group {
                 id: "group-one".into(),
                 label: "Ship feature".into(),
                 workspace_ids: vec!["w1".into()],
@@ -119,58 +119,58 @@ mod tests {
     }
 
     #[test]
-    fn task_groups_companion_merges_only_into_matching_snapshot() {
-        let mut state = TaskGroupProjection::default();
+    fn groups_companion_merges_only_into_matching_snapshot() {
+        let mut state = GroupProjection::default();
         state.receive(1, projection("boot", 4), None, None);
         let mut before = snapshot("boot", 3);
         state.project(Some(1), &mut before, None);
-        assert!(before.task_groups.is_empty());
+        assert!(before.groups.is_empty());
         let mut matching = snapshot("boot", 4);
         state.project(Some(1), &mut matching, Some((&before, Some(1))));
-        assert_eq!(matching.task_groups, projection("boot", 4).task_groups);
+        assert_eq!(matching.groups, projection("boot", 4).groups);
         let mut duplicate = snapshot("boot", 4);
         state.project(Some(1), &mut duplicate, Some((&matching, Some(1))));
-        assert_eq!(duplicate.task_groups, matching.task_groups);
+        assert_eq!(duplicate.groups, matching.groups);
         let mut next = snapshot("boot", 5);
         state.project(Some(1), &mut next, Some((&matching, Some(1))));
-        assert!(next.task_groups.is_empty());
+        assert!(next.groups.is_empty());
     }
 
     #[test]
-    fn task_groups_companion_cannot_cross_boot_or_connection_generation() {
+    fn groups_companion_cannot_cross_boot_or_connection_generation() {
         for (generation, boot_id) in [(2, "boot"), (1, "restarted")] {
-            let mut state = TaskGroupProjection::default();
+            let mut state = GroupProjection::default();
             state.receive(1, projection("boot", 4), None, None);
             let mut current = snapshot(boot_id, 4);
             state.project(Some(generation), &mut current, None);
-            assert!(current.task_groups.is_empty());
+            assert!(current.groups.is_empty());
         }
-        let mut state = TaskGroupProjection::default();
+        let mut state = GroupProjection::default();
         let mut current = snapshot("boot", 4);
         assert!(!state.receive(1, projection("boot", 4), Some(2), Some(&mut current)));
-        assert!(current.task_groups.is_empty());
+        assert!(current.groups.is_empty());
     }
 
     #[test]
-    fn task_groups_late_companion_applies_and_stale_revision_is_ignored() {
-        let mut state = TaskGroupProjection::default();
+    fn groups_late_companion_applies_and_stale_revision_is_ignored() {
+        let mut state = GroupProjection::default();
         let mut current = snapshot("boot", 4);
         assert!(state.receive(2, projection("boot", 4), Some(2), Some(&mut current)));
-        let expected = current.task_groups.clone();
+        let expected = current.groups.clone();
         assert!(!state.receive(2, projection("boot", 3), Some(2), Some(&mut current)));
-        assert_eq!(current.task_groups, expected);
+        assert_eq!(current.groups, expected);
         let mut cleared = projection("boot", 4);
-        cleared.task_groups.clear();
+        cleared.groups.clear();
         assert!(state.receive(2, cleared, Some(2), Some(&mut current)));
-        assert!(current.task_groups.is_empty());
+        assert!(current.groups.is_empty());
     }
 
     #[test]
-    fn task_groups_absent_companion_keeps_legacy_snapshot_usable() {
-        let mut state = TaskGroupProjection::default();
+    fn groups_absent_companion_keeps_legacy_snapshot_usable() {
+        let mut state = GroupProjection::default();
         let mut current = snapshot("old-server", 1);
         state.project(Some(1), &mut current, None);
-        assert!(current.task_groups.is_empty());
+        assert!(current.groups.is_empty());
         assert!(!current.workspaces.is_empty());
     }
 }

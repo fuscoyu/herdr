@@ -22,7 +22,7 @@ pub(crate) struct ClientShellEndpoint {
     pending_agent_view_projection: Option<ClientEndpointAgentViewProjection>,
     pub(crate) agent_view_projection_supported: bool,
     pub(crate) methods: Option<HashSet<String>>,
-    task_group_projection: crate::client::endpoint::TaskGroupProjection,
+    group_projection: crate::client::endpoint::GroupProjection,
     workspace_git_head_projection: crate::client::endpoint::WorkspaceGitHeadProjection,
 }
 
@@ -90,8 +90,8 @@ impl ClientShellState {
                 agent_view_projection_supported: previous
                     .is_some_and(|endpoint| endpoint.agent_view_projection_supported),
                 methods: previous.and_then(|endpoint| endpoint.methods.clone()),
-                task_group_projection: previous
-                    .map(|endpoint| endpoint.task_group_projection.clone())
+                group_projection: previous
+                    .map(|endpoint| endpoint.group_projection.clone())
                     .unwrap_or_default(),
                 workspace_git_head_projection: previous
                     .map(|endpoint| endpoint.workspace_git_head_projection.clone())
@@ -141,7 +141,7 @@ impl ClientShellState {
             endpoint.agent_view_projection = None;
             endpoint.pending_agent_view_projection = None;
             endpoint.agent_view_projection_supported = false;
-            endpoint.task_group_projection = Default::default();
+            endpoint.group_projection = Default::default();
             endpoint.workspace_git_head_projection = Default::default();
         }
     }
@@ -332,11 +332,11 @@ impl ClientShellState {
             .map(|snapshot| (snapshot.boot_id.as_str(), snapshot.revision))
     }
 
-    pub(crate) fn set_endpoint_task_groups(
+    pub(crate) fn set_endpoint_groups(
         &mut self,
         endpoint_id: &ClientEndpointId,
         generation: u64,
-        projection: crate::protocol::endpoint::EndpointTaskGroups,
+        projection: crate::protocol::endpoint::EndpointGroups,
     ) -> bool {
         let Some(endpoint) = self
             .endpoints
@@ -345,7 +345,7 @@ impl ClientShellState {
         else {
             return false;
         };
-        let changed = endpoint.task_group_projection.receive(
+        let changed = endpoint.group_projection.receive(
             generation,
             projection,
             endpoint.snapshot_generation,
@@ -360,7 +360,7 @@ impl ClientShellState {
             {
                 // A late companion must not activate metadata waiting for its surface.
                 if presented.boot_id == cached.boot_id && presented.revision == cached.revision {
-                    presented.task_groups.clone_from(&cached.task_groups);
+                    presented.groups.clone_from(&cached.groups);
                 }
             }
         }
@@ -657,7 +657,7 @@ impl ClientShellState {
             self.retire_endpoint_notifications(endpoint_id);
         }
         let endpoint = &mut self.endpoints[index];
-        endpoint.task_group_projection.project(
+        endpoint.group_projection.project(
             generation,
             &mut snapshot,
             endpoint
@@ -841,7 +841,7 @@ pub(super) fn local_endpoint() -> ClientShellEndpoint {
         pending_agent_view_projection: None,
         agent_view_projection_supported: false,
         methods: None,
-        task_group_projection: Default::default(),
+        group_projection: Default::default(),
         workspace_git_head_projection: Default::default(),
     }
 }

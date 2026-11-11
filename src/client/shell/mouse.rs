@@ -519,7 +519,7 @@ impl ClientShellState {
             return None;
         }
         let snapshot = self.snapshot.as_deref()?;
-        let assigned = super::task_groups::assigned_workspace_ids(snapshot);
+        let assigned = super::groups::assigned_workspace_ids(snapshot);
         // Task headers and members are not reorder targets. Only the unassigned
         // section participates in the existing repository block reorder gesture.
         let first_unassigned = self.hits.workspaces.iter().find(|hit| {
@@ -529,7 +529,7 @@ impl ClientShellState {
         if point.1 < first_unassigned.rect.y.saturating_sub(1)
             || self
                 .hits
-                .task_groups
+                .groups
                 .iter()
                 .any(|hit| super::contains(hit.rect, point))
         {
@@ -609,7 +609,7 @@ impl ClientShellState {
         before_workspace_id: Option<&str>,
     ) -> Option<crate::api::schema::Method> {
         let snapshot = self.snapshot.as_deref()?;
-        let assigned = super::task_groups::assigned_workspace_ids(snapshot);
+        let assigned = super::groups::assigned_workspace_ids(snapshot);
         if assigned.contains(source_workspace_id)
             || before_workspace_id.is_some_and(|id| assigned.contains(id))
         {
@@ -1866,7 +1866,7 @@ impl ClientShellState {
                 }
                 let group_id = self
                     .hits
-                    .task_groups
+                    .groups
                     .iter()
                     .find(|hit| {
                         hit.endpoint_id == self.active_endpoint_id
@@ -1874,7 +1874,7 @@ impl ClientShellState {
                     })
                     .map(|hit| hit.group_id.clone());
                 if let Some(group_id) = group_id {
-                    self.open_task_group_context_menu(group_id, mouse.column, mouse.row);
+                    self.open_group_context_menu(group_id, mouse.column, mouse.row);
                     outcome.repaint = true;
                     return;
                 }
@@ -1895,7 +1895,7 @@ impl ClientShellState {
                         .any(|hit| super::contains(hit.rect, point))
                     && !self
                         .hits
-                        .task_groups
+                        .groups
                         .iter()
                         .any(|hit| super::contains(hit.rect, point))
                     && !self
@@ -1904,7 +1904,7 @@ impl ClientShellState {
                         .iter()
                         .any(|hit| super::contains(hit.rect, point))
                 {
-                    self.open_task_groups_context_menu(mouse.column, mouse.row);
+                    self.open_groups_context_menu(mouse.column, mouse.row);
                     outcome.repaint = true;
                     return;
                 }
@@ -2153,18 +2153,18 @@ impl ClientShellState {
                     outcome.repaint = true;
                     return;
                 }
-                let task_group_toggle = self
+                let group_toggle = self
                     .hits
-                    .task_groups
+                    .groups
                     .iter()
                     .find(|hit| super::contains(hit.rect, point))
                     .map(|hit| {
                         (
                             hit.endpoint_id.clone(),
-                            super::task_groups::collapse_key(&hit.group_id),
+                            super::groups::collapse_key(&hit.group_id),
                         )
                     });
-                if let Some((endpoint_id, key)) = task_group_toggle {
+                if let Some((endpoint_id, key)) = group_toggle {
                     self.toggle_collapsed_group(&endpoint_id, key);
                     self.persist_chrome_preferences(outcome);
                     outcome.repaint = true;

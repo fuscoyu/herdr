@@ -6,23 +6,23 @@ use sha2::{Digest as _, Sha256};
 mod activation;
 mod catalog;
 mod control;
+mod groups;
 mod health;
 mod message_policy;
 mod registry;
 mod ssh_metadata;
 mod supervisor;
-mod task_groups;
 mod workspace_git_heads;
 mod writer;
 
 pub(crate) use activation::*;
 pub(crate) use catalog::*;
 pub(crate) use control::*;
+pub(crate) use groups::GroupProjection;
 pub(crate) use message_policy::*;
 pub(crate) use registry::*;
 pub(crate) use ssh_metadata::{SshMachineMetadata, SshMetadataCache};
 pub(crate) use supervisor::*;
-pub(crate) use task_groups::TaskGroupProjection;
 pub(crate) use workspace_git_heads::WorkspaceGitHeadProjection;
 pub(crate) use writer::NativeEndpointTransport;
 

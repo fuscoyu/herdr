@@ -2841,39 +2841,39 @@ fn navigator_foreign_workspace_heading_keeps_the_workspace_target() {
 }
 
 #[test]
-fn task_groups_companion_reaches_active_and_inactive_endpoint_snapshots() {
+fn groups_companion_reaches_active_and_inactive_endpoint_snapshots() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     let profile = remote_profile();
     let remote_id = ClientEndpointId::Ssh(profile.id.clone());
     state.set_endpoint_catalog(&[profile]);
     state.set_endpoint_status(&remote_id, ClientEndpointStatus::Online);
-    let groups = vec![crate::task_groups::TaskGroup {
+    let groups = vec![crate::groups::Group {
         id: "group-one".into(),
         label: "Ship feature".into(),
         workspace_ids: vec!["ws_1".into()],
     }];
     let local = snapshot();
-    assert!(!state.set_endpoint_task_groups(
+    assert!(!state.set_endpoint_groups(
         &ClientEndpointId::Local,
         1,
-        crate::protocol::endpoint::EndpointTaskGroups {
+        crate::protocol::endpoint::EndpointGroups {
             boot_id: local.boot_id.clone(),
             revision: local.revision,
-            task_groups: groups.clone(),
+            groups: groups.clone(),
         },
     ));
     state.set_endpoint_snapshot_for_generation(&ClientEndpointId::Local, 1, Box::new(local));
-    assert_eq!(state.snapshot.as_ref().unwrap().task_groups, groups);
+    assert_eq!(state.snapshot.as_ref().unwrap().groups, groups);
 
     let remote = snapshot();
     state.cache_endpoint_snapshot_inactive_for_generation(&remote_id, 2, Box::new(remote.clone()));
-    assert!(state.set_endpoint_task_groups(
+    assert!(state.set_endpoint_groups(
         &remote_id,
         2,
-        crate::protocol::endpoint::EndpointTaskGroups {
+        crate::protocol::endpoint::EndpointGroups {
             boot_id: remote.boot_id,
             revision: remote.revision,
-            task_groups: groups.clone(),
+            groups: groups.clone(),
         },
     ));
     assert_eq!(
@@ -2885,7 +2885,7 @@ fn task_groups_companion_reaches_active_and_inactive_endpoint_snapshots() {
             .snapshot
             .as_ref()
             .unwrap()
-            .task_groups,
+            .groups,
         groups
     );
     assert_eq!(state.active_endpoint_id, ClientEndpointId::Local);
@@ -2900,7 +2900,7 @@ fn task_groups_companion_reaches_active_and_inactive_endpoint_snapshots() {
 }
 
 #[test]
-fn late_task_groups_do_not_activate_a_snapshot_waiting_for_its_surface() {
+fn late_groups_do_not_activate_a_snapshot_waiting_for_its_surface() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     let first = snapshot();
     let mut next = first.clone();
@@ -2915,13 +2915,13 @@ fn late_task_groups_do_not_activate_a_snapshot_waiting_for_its_surface() {
         1,
         Box::new(next.clone()),
     );
-    state.set_endpoint_task_groups(
+    state.set_endpoint_groups(
         &ClientEndpointId::Local,
         1,
-        crate::protocol::endpoint::EndpointTaskGroups {
+        crate::protocol::endpoint::EndpointGroups {
             boot_id: next.boot_id,
             revision: next.revision,
-            task_groups: vec![crate::task_groups::TaskGroup {
+            groups: vec![crate::groups::Group {
                 id: "group-one".into(),
                 label: "Ship feature".into(),
                 workspace_ids: vec!["ws_1".into()],
@@ -2930,14 +2930,9 @@ fn late_task_groups_do_not_activate_a_snapshot_waiting_for_its_surface() {
     );
     let presented = state.snapshot.as_ref().unwrap();
     assert_eq!(presented.revision, first.revision);
-    assert!(presented.task_groups.is_empty());
+    assert!(presented.groups.is_empty());
     assert_eq!(
-        state.endpoints[0]
-            .snapshot
-            .as_ref()
-            .unwrap()
-            .task_groups
-            .len(),
+        state.endpoints[0].snapshot.as_ref().unwrap().groups.len(),
         1
     );
 }
@@ -2979,7 +2974,7 @@ fn navigator_hides_only_exact_group_branch_matches() {
         projected.workspaces[0].custom_label = true;
         projected.workspaces[0].branch = branch.map(str::to_owned);
         if let Some(label) = group_label {
-            projected.task_groups.push(crate::task_groups::TaskGroup {
+            projected.groups.push(crate::groups::Group {
                 id: "group-a".into(),
                 label: label.into(),
                 workspace_ids: vec!["ws_1".into()],
@@ -3010,7 +3005,7 @@ fn navigator_group_branch_matching_is_endpoint_local_and_keeps_search_metadata()
     local.workspaces[0].label = "custom-local".into();
     local.workspaces[0].custom_label = true;
     local.workspaces[0].branch = Some("task-a".into());
-    local.task_groups = vec![crate::task_groups::TaskGroup {
+    local.groups = vec![crate::groups::Group {
         id: "same-group-id".into(),
         label: "task-a".into(),
         workspace_ids: vec!["ws_1".into()],
@@ -3018,7 +3013,7 @@ fn navigator_group_branch_matching_is_endpoint_local_and_keeps_search_metadata()
     let mut remote = local.clone();
     remote.boot_id = "remote-boot".into();
     remote.workspaces[0].label = "custom-remote".into();
-    remote.task_groups[0].label = "different-group".into();
+    remote.groups[0].label = "different-group".into();
     state.set_snapshot(Box::new(local));
     state.set_endpoint_snapshot(&remote_id, Box::new(remote.clone()));
     // Search must still find a branch whose redundant display text is hidden.
@@ -3038,7 +3033,7 @@ fn navigator_group_branch_matching_is_endpoint_local_and_keeps_search_metadata()
     );
 
     // Missing companion metadata on an older remote is not evidence of a match.
-    remote.task_groups.clear();
+    remote.groups.clear();
     remote.revision += 1;
     state.set_endpoint_snapshot(&remote_id, Box::new(remote.clone()));
     let rows = navigator_branch_test_rows(&state, "task-a");
@@ -3047,7 +3042,7 @@ fn navigator_group_branch_matching_is_endpoint_local_and_keeps_search_metadata()
         .any(|row| row.label == "custom-remote" && row.meta == "task-a"));
 
     remote.revision += 1;
-    remote.task_groups.push(crate::task_groups::TaskGroup {
+    remote.groups.push(crate::groups::Group {
         id: "same-group-id".into(),
         label: "task-a".into(),
         workspace_ids: vec!["ws_1".into()],
@@ -3079,7 +3074,7 @@ fn navigator_keeps_branch_for_unassigned_or_ambiguous_group_membership() {
     for members in [vec!["ws_other"], vec!["ws_1", "ws_1"]] {
         let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
         let mut projected = snapshot();
-        projected.task_groups = vec![crate::task_groups::TaskGroup {
+        projected.groups = vec![crate::groups::Group {
             id: "a".into(),
             label: "main".into(),
             workspace_ids: members.into_iter().map(str::to_owned).collect(),
@@ -3092,13 +3087,13 @@ fn navigator_keeps_branch_for_unassigned_or_ambiguous_group_membership() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     let mut projected = snapshot();
     // Duplicate labels or IDs never establish membership by themselves.
-    projected.task_groups = vec![
-        crate::task_groups::TaskGroup {
+    projected.groups = vec![
+        crate::groups::Group {
             id: "a".into(),
             label: "main".into(),
             workspace_ids: vec!["ws_1".into()],
         },
-        crate::task_groups::TaskGroup {
+        crate::groups::Group {
             id: "a".into(),
             label: "main".into(),
             workspace_ids: vec!["ws_1".into()],
@@ -3116,7 +3111,7 @@ fn navigator_detached_head_status_overrides_group_matches_on_each_endpoint() {
     let mut local = snapshot();
     local.revision = 2;
     local.workspaces[0].label = "custom-local".into();
-    local.task_groups = vec![crate::task_groups::TaskGroup {
+    local.groups = vec![crate::groups::Group {
         id: "group-a".into(),
         label: "main".into(),
         workspace_ids: vec!["ws_1".into()],
@@ -3151,10 +3146,10 @@ fn navigator_detached_head_status_overrides_group_matches_on_each_endpoint() {
     local.revision += 1;
     local.workspaces[0].branch = None;
     local.detached_workspace_ids = vec!["ws_1".into(), "missing-workspace".into()];
-    local.task_groups[0].label = "detached HEAD".into();
+    local.groups[0].label = "detached HEAD".into();
     remote.revision += 1;
     remote.workspaces[0].branch = None;
-    remote.task_groups[0].label = "detached HEAD".into();
+    remote.groups[0].label = "detached HEAD".into();
     state.set_snapshot(Box::new(local.clone()));
     state.set_endpoint_snapshot(&remote_id, Box::new(remote.clone()));
     assert_eq!(
@@ -3171,7 +3166,7 @@ fn navigator_detached_head_status_overrides_group_matches_on_each_endpoint() {
     local.workspaces[0].branch = Some("other".into());
     remote.revision += 1;
     remote.detached_workspace_ids.clear();
-    remote.task_groups[0].label = "main".into();
+    remote.groups[0].label = "main".into();
     remote.workspaces[0].branch = Some("main".into());
     state.set_snapshot(Box::new(local));
     state.set_endpoint_snapshot(&remote_id, Box::new(remote));

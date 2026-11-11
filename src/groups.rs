@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-pub struct TaskGroup {
+pub struct Group {
     pub id: String,
     pub label: String,
     #[serde(default)]
@@ -14,10 +14,10 @@ pub struct TaskGroup {
 pub(crate) fn normalized_label(label: String) -> Result<String, String> {
     let label = label.trim();
     if label.is_empty() {
-        return Err("group label must not be empty".into());
+        return Err("group name must not be empty".into());
     }
     if label.chars().any(char::is_control) || label.chars().count() > 128 {
-        return Err("group label must be at most 128 characters without control characters".into());
+        return Err("group name must be at most 128 characters without control characters".into());
     }
     Ok(label.to_owned())
 }

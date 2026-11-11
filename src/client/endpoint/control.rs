@@ -10,7 +10,7 @@ pub(crate) enum EndpointControlMessage {
     HealthPong,
     AgentViewProjection(DecodedAgentViewProjection),
     AgentCompletions(crate::protocol::endpoint::EndpointAgentCompletions),
-    TaskGroups(crate::protocol::endpoint::EndpointTaskGroups),
+    Groups(crate::protocol::endpoint::EndpointGroups),
     WorkspaceGitHeads(crate::protocol::endpoint::EndpointWorkspaceGitHeads),
     Snapshot(Box<crate::protocol::ClientShellSnapshot>),
     Ignored,
@@ -28,9 +28,9 @@ pub(crate) fn decode_endpoint_control(
             .map(EndpointControlMessage::WorkspaceGitHeads)
             .unwrap_or(EndpointControlMessage::Ignored));
     }
-    if kind == crate::protocol::endpoint::TASK_GROUPS_KIND {
+    if kind == crate::protocol::endpoint::GROUPS_KIND {
         return Ok(serde_json::from_str(data)
-            .map(EndpointControlMessage::TaskGroups)
+            .map(EndpointControlMessage::Groups)
             .unwrap_or(EndpointControlMessage::Ignored));
     }
     if kind == crate::protocol::endpoint::AGENT_COMPLETIONS_KIND {
@@ -120,18 +120,18 @@ mod tests {
     }
 
     #[test]
-    fn task_groups_optional_control_tolerates_missing_future_and_malformed_data() {
-        let kind = crate::protocol::endpoint::TASK_GROUPS_KIND;
+    fn groups_optional_control_tolerates_missing_future_and_malformed_data() {
+        let kind = crate::protocol::endpoint::GROUPS_KIND;
         let decoded =
             decode_endpoint_control(kind, r#"{"boot_id":"boot","revision":3,"future":true}"#)
                 .unwrap();
-        let EndpointControlMessage::TaskGroups(projection) = decoded else {
-            panic!("expected task groups");
+        let EndpointControlMessage::Groups(projection) = decoded else {
+            panic!("expected groups");
         };
-        assert!(projection.task_groups.is_empty());
+        assert!(projection.groups.is_empty());
         for data in [
             "not json",
-            r#"{"boot_id":"boot","revision":3,"task_groups":[{"future":true}]}"#,
+            r#"{"boot_id":"boot","revision":3,"groups":[{"future":true}]}"#,
         ] {
             assert!(matches!(
                 decode_endpoint_control(kind, data).unwrap(),
@@ -139,7 +139,7 @@ mod tests {
             ));
         }
         assert!(matches!(
-            decode_endpoint_control("endpoint.task-groups.v2", "not json").unwrap(),
+            decode_endpoint_control("endpoint.groups.v2", "not json").unwrap(),
             EndpointControlMessage::Ignored
         ));
     }
@@ -151,7 +151,7 @@ mod tests {
             decode_endpoint_control(kind, r#"{"boot_id":"boot","revision":3,"future":true}"#)
                 .unwrap();
         let EndpointControlMessage::WorkspaceGitHeads(projection) = decoded else {
-            panic!("expected task groups");
+            panic!("expected groups");
         };
         assert!(projection.detached_workspace_ids.is_empty());
         for data in [

@@ -4,6 +4,7 @@ pub mod agents;
 pub mod commands;
 pub mod common;
 pub mod events;
+pub mod groups;
 pub mod integrations;
 pub mod panes;
 pub mod plugins;
@@ -11,7 +12,6 @@ pub mod response;
 pub mod server;
 pub mod session;
 pub mod tabs;
-pub mod task_groups;
 pub mod workspaces;
 pub mod worktrees;
 
@@ -19,6 +19,7 @@ pub use agents::*;
 pub use commands::*;
 pub use common::*;
 pub use events::*;
+pub use groups::*;
 pub use integrations::*;
 pub use panes::*;
 pub use plugins::*;
@@ -26,7 +27,6 @@ pub use response::*;
 pub use server::*;
 pub use session::*;
 pub use tabs::*;
-pub use task_groups::*;
 pub use workspaces::*;
 pub use worktrees::*;
 
@@ -251,16 +251,16 @@ pub enum Method {
     PluginPaneFocus(PluginPaneFocusParams),
     #[serde(rename = "plugin.pane.close")]
     PluginPaneClose(PluginPaneCloseParams),
-    #[serde(rename = "task_group.list")]
-    TaskGroupList(EmptyParams),
-    #[serde(rename = "task_group.create")]
-    TaskGroupCreate(TaskGroupCreateParams),
-    #[serde(rename = "task_group.rename")]
-    TaskGroupRename(TaskGroupRenameParams),
-    #[serde(rename = "task_group.delete")]
-    TaskGroupDelete(TaskGroupTarget),
-    #[serde(rename = "task_group.assign")]
-    TaskGroupAssign(TaskGroupAssignParams),
+    #[serde(rename = "group.list")]
+    GroupList(EmptyParams),
+    #[serde(rename = "group.create")]
+    GroupCreate(GroupCreateParams),
+    #[serde(rename = "group.rename")]
+    GroupRename(GroupRenameParams),
+    #[serde(rename = "group.delete")]
+    GroupDelete(GroupTarget),
+    #[serde(rename = "group.assign")]
+    GroupAssign(GroupAssignParams),
 }
 
 #[cfg(test)]

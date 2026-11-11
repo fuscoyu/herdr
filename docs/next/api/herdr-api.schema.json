@@ -2151,6 +2151,69 @@
           ],
           "type": "object"
         },
+        "GroupAssignParams": {
+          "properties": {
+            "group_id": {
+              "default": null,
+              "description": "A group ID assigns or moves the workspace; null or omission removes membership.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "workspace_id"
+          ],
+          "type": "object"
+        },
+        "GroupCreateParams": {
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "workspace_id": {
+              "description": "Optionally assign one existing workspace when creating the group.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "label"
+          ],
+          "type": "object"
+        },
+        "GroupRenameParams": {
+          "properties": {
+            "group_id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group_id",
+            "label"
+          ],
+          "type": "object"
+        },
+        "GroupTarget": {
+          "properties": {
+            "group_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "group_id"
+          ],
+          "type": "object"
+        },
         "IntegrationInstallParams": {
           "properties": {
             "target": {
@@ -4357,69 +4420,6 @@
           ],
           "type": "object"
         },
-        "TaskGroupAssignParams": {
-          "properties": {
-            "group_id": {
-              "default": null,
-              "description": "A group ID assigns or moves the workspace; null or omission removes membership.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "workspace_id": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "workspace_id"
-          ],
-          "type": "object"
-        },
-        "TaskGroupCreateParams": {
-          "properties": {
-            "label": {
-              "type": "string"
-            },
-            "workspace_id": {
-              "description": "Optionally assign one existing workspace when creating the group.",
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "label"
-          ],
-          "type": "object"
-        },
-        "TaskGroupRenameParams": {
-          "properties": {
-            "group_id": {
-              "type": "string"
-            },
-            "label": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "group_id",
-            "label"
-          ],
-          "type": "object"
-        },
-        "TaskGroupTarget": {
-          "properties": {
-            "group_id": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "group_id"
-          ],
-          "type": "object"
-        },
         "ToastHerdrPosition": {
           "enum": [
             "top-left",
@@ -6379,7 +6379,7 @@
         {
           "properties": {
             "method": {
-              "const": "task_group.list",
+              "const": "group.list",
               "type": "string"
             },
             "params": {
@@ -6395,11 +6395,11 @@
         {
           "properties": {
             "method": {
-              "const": "task_group.create",
+              "const": "group.create",
               "type": "string"
             },
             "params": {
-              "$ref": "#/schemas/request/$defs/TaskGroupCreateParams"
+              "$ref": "#/schemas/request/$defs/GroupCreateParams"
             }
           },
           "required": [
@@ -6411,11 +6411,11 @@
         {
           "properties": {
             "method": {
-              "const": "task_group.rename",
+              "const": "group.rename",
               "type": "string"
             },
             "params": {
-              "$ref": "#/schemas/request/$defs/TaskGroupRenameParams"
+              "$ref": "#/schemas/request/$defs/GroupRenameParams"
             }
           },
           "required": [
@@ -6427,11 +6427,11 @@
         {
           "properties": {
             "method": {
-              "const": "task_group.delete",
+              "const": "group.delete",
               "type": "string"
             },
             "params": {
-              "$ref": "#/schemas/request/$defs/TaskGroupTarget"
+              "$ref": "#/schemas/request/$defs/GroupTarget"
             }
           },
           "required": [
@@ -6443,11 +6443,11 @@
         {
           "properties": {
             "method": {
-              "const": "task_group.assign",
+              "const": "group.assign",
               "type": "string"
             },
             "params": {
-              "$ref": "#/schemas/request/$defs/TaskGroupAssignParams"
+              "$ref": "#/schemas/request/$defs/GroupAssignParams"
             }
           },
           "required": [
@@ -7627,6 +7627,28 @@
             "layout_updated"
           ],
           "type": "string"
+        },
+        "Group": {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "workspace_ids": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "id",
+            "label"
+          ],
+          "type": "object"
         },
         "InstalledPluginInfo": {
           "properties": {
@@ -10563,12 +10585,12 @@
               "properties": {
                 "groups": {
                   "items": {
-                    "$ref": "#/schemas/success_response/$defs/TaskGroup"
+                    "$ref": "#/schemas/success_response/$defs/Group"
                   },
                   "type": "array"
                 },
                 "type": {
-                  "const": "task_group_list",
+                  "const": "group_list",
                   "type": "string"
                 }
               },
@@ -10581,10 +10603,10 @@
             {
               "properties": {
                 "group": {
-                  "$ref": "#/schemas/success_response/$defs/TaskGroup"
+                  "$ref": "#/schemas/success_response/$defs/Group"
                 },
                 "type": {
-                  "const": "task_group_info",
+                  "const": "group_info",
                   "type": "string"
                 }
               },
@@ -10748,28 +10770,6 @@
             "focused",
             "pane_count",
             "agent_status"
-          ],
-          "type": "object"
-        },
-        "TaskGroup": {
-          "properties": {
-            "id": {
-              "type": "string"
-            },
-            "label": {
-              "type": "string"
-            },
-            "workspace_ids": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            }
-          },
-          "required": [
-            "id",
-            "label"
           ],
           "type": "object"
         },

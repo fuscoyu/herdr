@@ -11,16 +11,16 @@ fn group_cli(socket_path: &Path, args: &[&str]) -> serde_json::Value {
 }
 
 #[test]
-fn task_group_cli_cross_repo_worktrees_survive_restart_and_group_deletion() {
+fn group_cli_cross_repo_worktrees_survive_restart_and_group_deletion() {
     let base = unique_test_dir();
     let config_home = base.join("config");
     let runtime_dir = base.join("runtime");
-    let socket_path = named_session_socket(&config_home, "task-groups");
+    let socket_path = named_session_socket(&config_home, "groups");
     let repos = [base.join("bots"), base.join("common")];
     for repo in &repos {
         create_committed_repo(repo);
     }
-    let mut server = spawn_named_server(&config_home, &runtime_dir, "task-groups");
+    let mut server = spawn_named_server(&config_home, &runtime_dir, "groups");
     wait_for_socket(&socket_path, Duration::from_secs(5));
 
     let mut checkouts = Vec::new();
@@ -108,13 +108,13 @@ fn task_group_cli_cross_repo_worktrees_survive_restart_and_group_deletion() {
     let invalid = send_request(
         &socket_path,
         &serde_json::json!({
-            "id":"invalid", "method":"task_group.assign", "params":{
+            "id":"invalid", "method":"group.assign", "params":{
                 "workspace_id":members[0][0], "group_id":"missing-group",
             },
         })
         .to_string(),
     );
-    assert_eq!(invalid["error"]["code"], "task_group_not_found");
+    assert_eq!(invalid["error"]["code"], "group_not_found");
     let invalid = run_cli(&socket_path, &["group", "create", " "]);
     assert_eq!(invalid.status.code(), Some(1));
 
@@ -126,7 +126,7 @@ fn task_group_cli_cross_repo_worktrees_survive_restart_and_group_deletion() {
     );
     assert!(server.wait_for_exit().success());
     drop(server);
-    let mut restarted = spawn_named_server(&config_home, &runtime_dir, "task-groups");
+    let mut restarted = spawn_named_server(&config_home, &runtime_dir, "groups");
     wait_for_socket(&socket_path, Duration::from_secs(5));
     let restored = group_cli(&socket_path, &["group", "list"]);
     assert_eq!(restored["result"], before_restart["result"]);
@@ -173,7 +173,7 @@ fn task_group_cli_cross_repo_worktrees_survive_restart_and_group_deletion() {
 }
 
 #[test]
-fn task_group_cli_help_and_invalid_arguments_work_without_a_server() {
+fn group_cli_help_and_invalid_arguments_work_without_a_server() {
     let base = unique_test_dir();
     let socket_path = base.join("missing.sock");
     for args in [

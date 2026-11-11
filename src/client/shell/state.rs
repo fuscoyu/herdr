@@ -85,7 +85,7 @@ pub(super) enum ClientMobileTarget {
 pub(super) struct ShellHitMap {
     pub(super) machines: Vec<MachineHit>,
     pub(super) workspaces: Vec<WorkspaceHit>,
-    pub(super) task_groups: Vec<TaskGroupHit>,
+    pub(super) groups: Vec<GroupHit>,
     pub(super) workspace_body: Rect,
     pub(super) workspace_scrollbar: Rect,
     pub(super) workspace_scroll_metrics: Option<crate::pane::ScrollMetrics>,
@@ -232,7 +232,7 @@ pub(super) enum ClientChromeDrag {
     },
 }
 
-pub(super) struct TaskGroupHit {
+pub(super) struct GroupHit {
     pub(super) rect: Rect,
     pub(super) endpoint_id: ClientEndpointId,
     pub(super) group_id: String,
@@ -302,10 +302,10 @@ pub(super) enum ClientShellOverlayKind {
 
 #[derive(Debug)]
 pub(super) enum ClientRenameTarget {
-    NewTaskGroup {
+    NewGroup {
         workspace_id: Option<String>,
     },
-    TaskGroup {
+    Group {
         group_id: String,
     },
     NewWorkspace {
@@ -529,11 +529,11 @@ pub(super) enum ClientContextMenuAction {
     OpenWorktree,
     RemoveWorktree,
     ToggleGroup,
-    NewTaskGroup,
-    ChooseTaskGroup,
-    AssignTaskGroup(usize),
-    RemoveFromTaskGroup,
-    DeleteTaskGroup,
+    NewGroup,
+    ChooseGroup,
+    AssignGroup(usize),
+    RemoveFromGroup,
+    DeleteGroup,
     NewTab,
     RenamePane,
     ClearPaneName,
@@ -547,26 +547,26 @@ pub(super) enum ClientContextMenuAction {
 
 #[derive(Debug)]
 pub(super) enum ClientContextMenuTarget {
-    TaskGroups,
-    TaskGroup {
+    Groups,
+    Group {
         group_id: String,
         collapsed: bool,
         can_rename: bool,
         can_delete: bool,
     },
-    TaskGroupPicker {
+    GroupPicker {
         workspace_id: String,
-        groups: Vec<crate::task_groups::TaskGroup>,
+        groups: Vec<crate::groups::Group>,
     },
     Workspace {
         workspace_id: String,
         is_git: bool,
         is_linked_worktree: bool,
         has_worktree_children: bool,
-        can_create_task_group: bool,
-        can_assign_task_group: bool,
-        has_task_groups: bool,
-        assigned_task_group: bool,
+        can_create_group: bool,
+        can_assign_group: bool,
+        has_groups: bool,
+        assigned_group: bool,
         close_group: bool,
         collapsed: bool,
     },
@@ -1023,7 +1023,7 @@ pub(super) struct WorkspaceEntry {
     pub(super) index: usize,
     pub(super) indented: bool,
     pub(super) last_child: bool,
-    pub(super) task_group: bool,
+    pub(super) group: bool,
 }
 
 impl ClientShellState {

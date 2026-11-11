@@ -248,7 +248,7 @@ pub(crate) fn render_sidebar(
                 .map(|workspace| {
                     workspace_rows(
                         workspace,
-                        if entry.task_group {
+                        if entry.group {
                             workspace.agent_status
                         } else {
                             displayed_workspace_status(snapshot, workspace, state.collapsed_groups)
@@ -296,7 +296,7 @@ pub(crate) fn render_sidebar(
                         }
                     })
             }
-            SidebarEntry::TaskGroup(_) => false,
+            SidebarEntry::Group(_) => false,
         }) {
             *state.workspace_scroll = super::scroll::list_scroll_start_to_reveal(
                 &row_heights,
@@ -323,18 +323,18 @@ pub(crate) fn render_sidebar(
     let mut y = body.y;
     for (entry_position, row) in entries.iter().enumerate().skip(*state.workspace_scroll) {
         let entry = match row {
-            SidebarEntry::TaskGroup(index) => {
+            SidebarEntry::Group(index) => {
                 if y >= body.bottom() {
                     break;
                 }
-                if let Some(group) = snapshot.task_groups.get(*index) {
-                    super::super::task_groups::render_group_header(
+                if let Some(group) = snapshot.groups.get(*index) {
+                    super::super::groups::render_group_header(
                         buffer,
                         Rect::new(body.x, y, content_width, 1),
                         group,
                         state
                             .collapsed_groups
-                            .contains(&super::super::task_groups::collapse_key(&group.id)),
+                            .contains(&super::super::groups::collapse_key(&group.id)),
                         &ClientEndpointId::Local,
                         palette,
                         hits,
@@ -348,7 +348,7 @@ pub(crate) fn render_sidebar(
         let Some(workspace) = snapshot.workspaces.get(entry.index) else {
             continue;
         };
-        let status = if entry.task_group {
+        let status = if entry.group {
             workspace.agent_status
         } else {
             displayed_workspace_status(snapshot, workspace, state.collapsed_groups)
@@ -383,7 +383,7 @@ pub(crate) fn render_sidebar(
             dragged,
             palette,
         );
-        let group_toggle = if entry.task_group {
+        let group_toggle = if entry.group {
             None
         } else {
             render_parent_group_toggle(
@@ -510,7 +510,7 @@ pub(crate) fn render_sidebar(
 
 #[derive(Clone, Copy)]
 pub(in crate::client::shell) enum SidebarEntry {
-    TaskGroup(usize),
+    Group(usize),
     Workspace(WorkspaceEntry),
 }
 
@@ -524,7 +524,7 @@ pub(in crate::client::shell) fn sidebar_entries(
     snapshot: &ClientShellSnapshot,
     collapsed_groups: &HashSet<String>,
 ) -> Vec<SidebarEntry> {
-    if snapshot.task_groups.is_empty() {
+    if snapshot.groups.is_empty() {
         return ungrouped_workspace_entries(snapshot, collapsed_groups)
             .into_iter()
             .map(SidebarEntry::Workspace)
@@ -538,10 +538,9 @@ pub(in crate::client::shell) fn sidebar_entries(
         .collect::<HashMap<_, _>>();
     let mut emitted = HashSet::new();
     let mut rows = Vec::new();
-    for (group_index, group) in snapshot.task_groups.iter().enumerate() {
-        rows.push(SidebarEntry::TaskGroup(group_index));
-        let collapsed =
-            collapsed_groups.contains(&super::super::task_groups::collapse_key(&group.id));
+    for (group_index, group) in snapshot.groups.iter().enumerate() {
+        rows.push(SidebarEntry::Group(group_index));
+        let collapsed = collapsed_groups.contains(&super::super::groups::collapse_key(&group.id));
         let members = group
             .workspace_ids
             .iter()
@@ -559,7 +558,7 @@ pub(in crate::client::shell) fn sidebar_entries(
                 index,
                 indented: true,
                 last_child: position + 1 == members.len(),
-                task_group: true,
+                group: true,
             }));
         }
     }
@@ -575,14 +574,14 @@ pub(crate) fn workspace_entries(
     snapshot: &ClientShellSnapshot,
     collapsed_groups: &HashSet<String>,
 ) -> Vec<WorkspaceEntry> {
-    if snapshot.task_groups.is_empty() {
+    if snapshot.groups.is_empty() {
         return ungrouped_workspace_entries(snapshot, collapsed_groups);
     }
     sidebar_entries(snapshot, collapsed_groups)
         .into_iter()
         .filter_map(|entry| match entry {
             SidebarEntry::Workspace(entry) => Some(entry),
-            SidebarEntry::TaskGroup(_) => None,
+            SidebarEntry::Group(_) => None,
         })
         .collect()
 }
@@ -591,7 +590,7 @@ fn ungrouped_workspace_entries(
     snapshot: &ClientShellSnapshot,
     collapsed_groups: &HashSet<String>,
 ) -> Vec<WorkspaceEntry> {
-    let assigned = super::super::task_groups::assigned_workspace_ids(snapshot);
+    let assigned = super::super::groups::assigned_workspace_ids(snapshot);
     let mut members = HashMap::<&str, Vec<usize>>::new();
     for (index, workspace) in snapshot.workspaces.iter().enumerate() {
         if assigned.contains(workspace.workspace_id.as_str()) {
@@ -633,7 +632,7 @@ fn ungrouped_workspace_entries(
                 index,
                 indented: false,
                 last_child: false,
-                task_group: false,
+                group: false,
             });
             continue;
         };
@@ -653,7 +652,7 @@ fn ungrouped_workspace_entries(
                 index: parent,
                 indented: false,
                 last_child: false,
-                task_group: false,
+                group: false,
             });
         }
         if collapsed_groups.contains(&worktree.key) {
@@ -669,7 +668,7 @@ fn ungrouped_workspace_entries(
                     index: active,
                     indented: true,
                     last_child: true,
-                    task_group: false,
+                    group: false,
                 });
             }
             continue;
@@ -689,7 +688,7 @@ fn ungrouped_workspace_entries(
                 index: *child,
                 indented: true,
                 last_child: child_index + 1 == children.len(),
-                task_group: false,
+                group: false,
             });
         }
     }
@@ -701,7 +700,7 @@ pub(in crate::client::shell) fn parent_group_key(
     index: usize,
 ) -> Option<String> {
     let workspace = snapshot.workspaces.get(index)?;
-    if super::super::task_groups::workspace_is_assigned(snapshot, &workspace.workspace_id) {
+    if super::super::groups::workspace_is_assigned(snapshot, &workspace.workspace_id) {
         return None;
     }
     let worktree = workspace.worktree.as_ref()?;
@@ -712,7 +711,7 @@ pub(in crate::client::shell) fn parent_group_key(
         .workspaces
         .iter()
         .any(|candidate| {
-            !super::super::task_groups::workspace_is_assigned(snapshot, &candidate.workspace_id)
+            !super::super::groups::workspace_is_assigned(snapshot, &candidate.workspace_id)
                 && candidate.worktree.as_ref().is_some_and(|candidate| {
                     candidate.key == worktree.key && candidate.is_linked_worktree
                 })
@@ -724,7 +723,7 @@ pub(in crate::client::shell) fn workspace_close_is_group(
     snapshot: &ClientShellSnapshot,
     workspace: &ClientShellWorkspace,
 ) -> bool {
-    if super::super::task_groups::workspace_is_assigned(snapshot, &workspace.workspace_id) {
+    if super::super::groups::workspace_is_assigned(snapshot, &workspace.workspace_id) {
         return false;
     }
     let Some(worktree) = workspace
@@ -746,7 +745,7 @@ pub(in crate::client::shell) fn workspace_close_is_group(
         {
             // The old close-group request closes the whole repository. Never offer it
             // when that would also close a workspace assigned to another task.
-            if super::super::task_groups::workspace_is_assigned(snapshot, &member.workspace_id) {
+            if super::super::groups::workspace_is_assigned(snapshot, &member.workspace_id) {
                 return false;
             }
             if !candidate.is_linked_worktree {
@@ -793,7 +792,7 @@ pub(in crate::client::shell) fn displayed_workspace_status(
     workspace: &ClientShellWorkspace,
     collapsed_groups: &HashSet<String>,
 ) -> crate::api::schema::AgentStatus {
-    if super::super::task_groups::workspace_is_assigned(snapshot, &workspace.workspace_id) {
+    if super::super::groups::workspace_is_assigned(snapshot, &workspace.workspace_id) {
         return workspace.agent_status;
     }
     let Some(worktree) = workspace
@@ -810,7 +809,7 @@ pub(in crate::client::shell) fn displayed_workspace_status(
         .workspaces
         .iter()
         .filter(|candidate| {
-            !super::super::task_groups::workspace_is_assigned(snapshot, &candidate.workspace_id)
+            !super::super::groups::workspace_is_assigned(snapshot, &candidate.workspace_id)
                 && candidate.worktree.as_ref().is_some_and(|member| {
                     member.key == worktree.key
                         && (member.is_linked_worktree
@@ -828,8 +827,8 @@ pub(in crate::client::shell) fn workspace_rows(
     entry: &WorkspaceEntry,
     config: &SpacesSidebarConfig,
 ) -> Vec<Vec<crate::ui::ResolvedToken>> {
-    let indented = entry.indented && !entry.task_group;
-    let label = if entry.task_group {
+    let indented = entry.indented && !entry.group;
+    let label = if entry.group {
         workspace
             .worktree
             .as_ref()
@@ -854,7 +853,7 @@ pub(in crate::client::shell) fn workspace_rows(
             state_text: status_text(status),
             ahead_behind: workspace.git_ahead_behind,
             tokens: &token_values,
-            suppress_git_details: indented || entry.task_group,
+            suppress_git_details: indented || entry.group,
         },
     )
 }

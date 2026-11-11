@@ -331,7 +331,7 @@ pub(super) fn navigator_rows(
             // Group membership is endpoint-local. Ambiguous membership keeps the
             // branch visible rather than choosing a group from malformed metadata.
             let mut group_labels = HashMap::new();
-            for group in &snapshot.task_groups {
+            for group in &snapshot.groups {
                 for workspace_id in &group.workspace_ids {
                     group_labels
                         .entry(workspace_id.as_str())

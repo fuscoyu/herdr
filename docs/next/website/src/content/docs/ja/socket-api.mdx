@@ -97,7 +97,7 @@ herdr pane read w1:p2 --source recent --lines 50
 | クライアント | `client.window_title.set`、`client.window_title.clear` |
 | セッション | `session.snapshot` |
 | ワークスペース | `workspace.create`、`workspace.list`、`workspace.get`、`workspace.focus`、`workspace.rename`、`workspace.move`、`workspace.move_block`、`workspace.report_metadata`、`workspace.close` |
-| グループ | `task_group.list`, `task_group.create`, `task_group.rename`, `task_group.delete`, `task_group.assign` |
+| グループ | `group.list`, `group.create`, `group.rename`, `group.delete`, `group.assign` |
 | Worktree | `worktree.list`、`worktree.create`、`worktree.open`、`worktree.remove` |
 | タブ | `tab.create`、`tab.list`、`tab.get`、`tab.focus`、`tab.rename`、`tab.move`、`tab.close` |
 | ペイン | `pane.split`、`pane.swap`、`pane.move`、`pane.zoom`、`pane.layout`、`pane.process_info`、`pane.neighbor`、`pane.edges`、`pane.focus_direction`、`pane.resize`、`pane.list`、`pane.current`、`pane.get`、`pane.rename`、`pane.send_text`、`pane.send_keys`、`pane.send_input`、`pane.read`、`pane.report_agent`、`pane.report_agent_session`、`pane.report_metadata`、`pane.clear_agent_authority`、`pane.release_agent`、`pane.close`、`pane.wait_for_output` |
@@ -108,11 +108,11 @@ herdr pane read w1:p2 --source recent --lines 50
 | インテグレーション | `integration.install`、`integration.uninstall` |
 | プラグイン | `plugin.link`、`plugin.list`、`plugin.unlink`、`plugin.enable`、`plugin.disable`、`plugin.action.list`、`plugin.action.invoke`、`plugin.log.list`、`plugin.pane.open`、`plugin.pane.focus`、`plugin.pane.close` |
 
-`task_group.list` は `{type: "task_group_list", groups: [...]}` を返します。各グループは `id`、`label`、`workspace_ids` を持ちます。`task_group.create` は `{label, workspace_id?}` を受け付け、省略可能なワークスペースを作成前に検証するため、無効な入力で空のグループが残ることはありません。`task_group.rename` は `{group_id, label}` を受け付けます。どちらも `{type: "task_group_info", group: {...}}` を返します。
+`group.list` は `{type: "group_list", groups: [...]}` を返します。各グループは `id`、`label`、`workspace_ids` を持ちます。`group.create` は `{label, workspace_id?}` を受け付け、省略可能なワークスペースを作成前に検証するため、無効な入力で空のグループが残ることはありません。`group.rename` は `{group_id, label}` を受け付けます。どちらも `{type: "group_info", group: {...}}` を返します。
 
-`task_group.assign` は `{workspace_id, group_id}` を受け付け、指定したワークスペースだけを選択したグループへ移します。`group_id` を `null` にするか省略すると所属を解除します。ワークスペースは `workspace.get` と同じ安定した ID または数値エイリアスで指定でき、保存された所属情報と一覧は常に安定した ID を使います。`task_group.delete` は `{group_id}` を受け付け、グループだけを削除して、ワークスペース、ターミナル、worktree、ブランチを維持します。所属の変更と削除は `{type: "ok"}` を返します。グループがない場合は `task_group_not_found`、ワークスペースがない場合は `workspace_not_found`、ラベルが無効な場合は `invalid_params` を返します。ラベルは前後の空白を除いて 1〜128 文字で、制御文字は使用できません。
+`group.assign` は `{workspace_id, group_id}` を受け付け、指定したワークスペースだけを選択したグループへ移します。`group_id` を `null` にするか省略すると所属を解除します。ワークスペースは `workspace.get` と同じ安定した ID または数値エイリアスで指定でき、保存された所属情報と一覧は常に安定した ID を使います。`group.delete` は `{group_id}` を受け付け、グループだけを削除して、ワークスペース、ターミナル、worktree、ブランチを維持します。所属の変更と削除は `{type: "ok"}` を返します。グループがない場合は `group_not_found`、ワークスペースがない場合は `workspace_not_found`、ラベルが無効な場合は `invalid_params` を返します。ラベルは前後の空白を除いて 1〜128 文字で、制御文字は使用できません。
 
-空のグループも含めてサーバーセッションに保存されます。所属はリポジトリ識別子とは独立しており、ファイルシステムを分離しません。最新のグループ情報は `task_group.list` で取得してください。既存の `workspace` と `session.snapshot` のレスポンス形式は変わりません。
+空のグループも含めてサーバーセッションに保存されます。所属はリポジトリ識別子とは独立しており、ファイルシステムを分離しません。最新のグループ情報は `group.list` で取得してください。既存の `workspace` と `session.snapshot` のレスポンス形式は変わりません。
 
 `agent.wait` はサーバー所有でイベント駆動です。解決したペイン占有者に固定されるため、置換されたエージェントが待機を満たすことはありません。`agent.prompt` は `until` と `timeout_ms` を持つ省略可能な `wait` オブジェクトを受け付けます。これにより、プロンプト送信と待機開始を 1 つのリクエストで行い、別々の呼び出し間の競合を避けられます。解決したエージェントがすでに `blocked` の場合、`agent.prompt` は入力を送信せず、待機も開始せずに `agent_blocked` を返します。
 
@@ -776,3 +776,5 @@ herdr agent wait w1:p1 --until blocked
 クライアント描画の Herdr UI は、ローカルサーバーと SSH サーバーに安定したエンドポイント世代を使います。クライアントとサーバーのビルドが一致する必要はありません。接続時にコアのスナップショット、画面、入力、blob コーデックを合意し、サーバーが対応 API メソッドと任意の能力を通知します。保存済み SSH マシンには、選択中のマシンだけがペイン画面を送信するための `surface_interest` と、通信のない接続の障害を検知する `health_check` が必要です。未対応のサーバーは明示的に更新するまで Attention になります。詳しくは[マシンへの接続](/ja/docs/connecting-machines/)を参照してください。メソッドがない場合は、そのサーバー上の該当アクションだけを無効にしてクライアント側通知を表示します。拒否やタイムアウトも接続を終了せず通知します。エンドポイント世代 1 より前のサーバーだけは最後の 1 回の更新が必要です。
 
 番号付きバイナリプロトコルは、直接ターミナル接続やライブハンドオフなど、同一インストール内の内部操作に残ります。異なるビルド間でそれらを使う前に `ping` または `herdr status` を確認してください。JSON API クライアントは未知のフィールドを無視し、未対応メソッドを通常のエラーとして扱う必要があります。
+
+この fork は `group.*` 名前空間、`group_list` / `group_info` 応答型、`group_not_found` エラー、`groups` セッションフィールドのみを使用します。別のグループ名前空間を使用する旧 fork とは互換性がないため、サーバーとクライアントを同時に更新してください。アップグレードやダウングレードの前にセッションデータをバックアップしてください。未対応のフィールドを含むセッションは読み込みと上書きを拒否します。元のファイルを残し、バックアップのコピーを明示的に移行してから復元してください。JSON の名前フィールドは `label` のままで、作成ダイアログには “Group name” と表示されます。

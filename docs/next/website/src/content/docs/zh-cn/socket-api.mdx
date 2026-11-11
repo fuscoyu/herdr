@@ -97,7 +97,7 @@ herdr pane read w1:p2 --source recent --lines 50
 | 客户端 | `client.window_title.set`、`client.window_title.clear` |
 | 会话 | `session.snapshot` |
 | 工作区 | `workspace.create`、`workspace.list`、`workspace.get`、`workspace.focus`、`workspace.rename`、`workspace.move`、`workspace.move_block`、`workspace.report_metadata`、`workspace.close` |
-| 分组 | `task_group.list`, `task_group.create`, `task_group.rename`, `task_group.delete`, `task_group.assign` |
+| 分组 | `group.list`, `group.create`, `group.rename`, `group.delete`, `group.assign` |
 | Worktree | `worktree.list`、`worktree.create`、`worktree.open`、`worktree.remove` |
 | 标签页 | `tab.create`、`tab.list`、`tab.get`、`tab.focus`、`tab.rename`、`tab.move`、`tab.close` |
 | 窗格 | `pane.split`、`pane.swap`、`pane.move`、`pane.zoom`、`pane.layout`、`pane.process_info`、`pane.neighbor`、`pane.edges`、`pane.focus_direction`、`pane.resize`、`pane.list`、`pane.current`、`pane.get`、`pane.rename`、`pane.send_text`、`pane.send_keys`、`pane.send_input`、`pane.read`、`pane.report_agent`、`pane.report_agent_session`、`pane.report_metadata`、`pane.clear_agent_authority`、`pane.release_agent`、`pane.close`、`pane.wait_for_output` |
@@ -108,11 +108,11 @@ herdr pane read w1:p2 --source recent --lines 50
 | 集成 | `integration.install`、`integration.uninstall` |
 | 插件 | `plugin.link`、`plugin.list`、`plugin.unlink`、`plugin.enable`、`plugin.disable`、`plugin.action.list`、`plugin.action.invoke`、`plugin.log.list`、`plugin.pane.open`、`plugin.pane.focus`、`plugin.pane.close` |
 
-`task_group.list` 返回 `{type: "task_group_list", groups: [...]}`。每个组包含 `id`、`label` 和 `workspace_ids`。`task_group.create` 接收 `{label, workspace_id?}`，会在创建前验证可选的工作区，因此无效输入不会留下空组。`task_group.rename` 接收 `{group_id, label}`。两者均返回 `{type: "task_group_info", group: {...}}`。
+`group.list` 返回 `{type: "group_list", groups: [...]}`。每个组包含 `id`、`label` 和 `workspace_ids`。`group.create` 接收 `{label, workspace_id?}`，会在创建前验证可选的工作区，因此无效输入不会留下空组。`group.rename` 接收 `{group_id, label}`。两者均返回 `{type: "group_info", group: {...}}`。
 
-`task_group.assign` 接收 `{workspace_id, group_id}`，只将指定工作区移入选定的组。将 `group_id` 设为 `null` 或省略该字段可解除分组。工作区可使用与 `workspace.get` 相同的稳定 ID 或数字别名；保存的成员关系和列表结果始终使用稳定工作区 ID。`task_group.delete` 接收 `{group_id}`，只删除分组关系，保留工作区、终端、worktree 和分支。分配和删除返回 `{type: "ok"}`。组不存在时返回 `task_group_not_found`，工作区不存在时返回 `workspace_not_found`，标签无效时返回 `invalid_params`。标签会去除首尾空白，必须为 1–128 个字符，且不能包含控制字符。
+`group.assign` 接收 `{workspace_id, group_id}`，只将指定工作区移入选定的组。将 `group_id` 设为 `null` 或省略该字段可解除分组。工作区可使用与 `workspace.get` 相同的稳定 ID 或数字别名；保存的成员关系和列表结果始终使用稳定工作区 ID。`group.delete` 接收 `{group_id}`，只删除分组关系，保留工作区、终端、worktree 和分支。分配和删除返回 `{type: "ok"}`。组不存在时返回 `group_not_found`，工作区不存在时返回 `workspace_not_found`，标签无效时返回 `invalid_params`。标签会去除首尾空白，必须为 1–128 个字符，且不能包含控制字符。
 
-空组也会随服务器会话保存。成员关系独立于仓库身份，不提供文件系统隔离。请使用 `task_group.list` 获取权威的组信息；现有 `workspace` 和 `session.snapshot` 响应格式保持不变。
+空组也会随服务器会话保存。成员关系独立于仓库身份，不提供文件系统隔离。请使用 `group.list` 获取权威的组信息；现有 `workspace` 和 `session.snapshot` 响应格式保持不变。
 
 `agent.wait` 由服务器拥有并由事件驱动。它会固定到已解析的窗格占用者,因此替换后的智能体不能满足该等待。`agent.prompt` 接受可选的 `wait` 对象,其中包含 `until` 和 `timeout_ms`;这样可在一个请求中提交提示并开始等待,避免两个独立调用之间的竞态。如果解析出的智能体已经是 `blocked`,`agent.prompt` 不会发送输入或开始等待,而是返回 `agent_blocked`。
 
@@ -770,3 +770,5 @@ herdr agent wait w1:p1 --until blocked
 由客户端渲染的 Herdr UI 对本地和 SSH 服务器使用稳定的端点代数。客户端和服务器构建不必一致。连接时，双方会协商核心快照、屏幕、输入和 blob 编解码器，服务器则公布支持的 API 方法和可选能力。已保存的 SSH 机器需要 `surface_interest` 来确保只有选中的机器传输窗格画面，并需要 `health_check` 来发现空闲连接的故障。缺少这些能力的服务器会显示 Attention，直到明确更新。详见[连接机器](/zh-cn/docs/connecting-machines/)。缺少方法时,只禁用该服务器上的对应操作并显示客户端本地通知;操作被拒绝或超时也不会断开连接。只有早于端点第 1 代的服务器需要最后更新一次。
 
 带编号的二进制协议仍用于同一安装内的内部操作,包括直接终端连接和实时交接。跨不同构建使用这些操作前,请检查 `ping` 或 `herdr status`。JSON API 客户端应忽略未知字段,并把不支持的方法当作普通错误处理。
+
+本 fork 仅使用 `group.*` 命名空间、`group_list` / `group_info` 返回类型、`group_not_found` 错误码和 `groups` 会话字段。使用不同分组命名空间的旧 fork 不兼容，服务端和客户端应同步更新。升级或降级前请备份会话数据；遇到无法识别的会话字段时会拒绝读取和覆盖原文件，请在备份副本上明确迁移后再恢复。JSON 名称字段仍为 `label`，创建对话框显示 “Group name”。

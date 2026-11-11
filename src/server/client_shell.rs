@@ -258,7 +258,7 @@ pub(super) fn snapshot_with_completions(
         tab_bar_right_separator: app.state.tab_bar_right_separator.clone(),
         agent_view_label,
         agent_order,
-        task_groups: app.state.task_groups.clone(),
+        groups: app.state.groups.clone(),
         detached_workspace_ids: app
             .state
             .workspaces
@@ -699,7 +699,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn task_group_snapshot_uses_public_workspace_ids_and_detects_metadata_changes() {
+    async fn group_snapshot_uses_public_workspace_ids_and_detects_metadata_changes() {
         let (_api_tx, api_rx) = tokio::sync::mpsc::unbounded_channel();
         let mut app = crate::app::App::new(
             &crate::config::Config::default(),
@@ -713,21 +713,21 @@ mod tests {
             crate::workspace::Workspace::test_new("second"),
         ];
         app.state.active = Some(0);
-        app.state.task_groups = vec![crate::task_groups::TaskGroup {
+        app.state.groups = vec![crate::groups::Group {
             id: "group-one".into(),
             label: "Ship feature".into(),
             workspace_ids: vec![app.state.workspaces[1].id.clone()],
         }];
         let initial = snapshot(&app, "boot", 1, None, None);
-        assert_eq!(initial.task_groups, app.state.task_groups);
+        assert_eq!(initial.groups, app.state.groups);
         assert_eq!(
-            initial.task_groups[0].workspace_ids,
+            initial.groups[0].workspace_ids,
             vec![initial.workspaces[1].workspace_id.clone()]
         );
-        app.state.task_groups[0].label = "Ship renamed feature".into();
+        app.state.groups[0].label = "Ship renamed feature".into();
         let renamed = snapshot(&app, "boot", 1, None, None);
         assert_ne!(initial, renamed);
-        app.state.task_groups[0].workspace_ids = vec![app.state.workspaces[0].id.clone()];
+        app.state.groups[0].workspace_ids = vec![app.state.workspaces[0].id.clone()];
         let reassigned = snapshot(&app, "boot", 1, None, None);
         assert_ne!(renamed, reassigned);
         assert_eq!(

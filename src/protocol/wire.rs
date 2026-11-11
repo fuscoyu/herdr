@@ -943,9 +943,9 @@ pub struct ClientShellSnapshot {
     pub tab_bar_right_separator: String,
     pub agent_view_label: Option<String>,
     pub agent_order: Vec<String>,
-    /// Optional task-group companion data; never part of the frozen V1 core codec.
+    /// Optional group companion data; never part of the frozen V1 core codec.
     #[serde(skip)]
-    pub task_groups: Vec<crate::task_groups::TaskGroup>,
+    pub groups: Vec<crate::groups::Group>,
     /// Optional Git HEAD companion; excluded from every frozen core codec.
     #[serde(skip)]
     pub detached_workspace_ids: Vec<String>,
@@ -2823,7 +2823,7 @@ mod tests {
             tab_bar_right_separator: " · ".into(),
             agent_view_label: None,
             agent_order: Vec::new(),
-            task_groups: Vec::new(),
+            groups: Vec::new(),
             detached_workspace_ids: Vec::new(),
             workspaces: vec![ClientShellWorkspace {
                 workspace_id: "w1".into(),

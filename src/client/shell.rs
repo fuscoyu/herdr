@@ -16,7 +16,7 @@ mod endpoint_navigation;
 mod endpoint_notices;
 mod endpoint_sidebar;
 mod endpoints;
-mod task_groups;
+mod groups;
 pub(super) use endpoints::*;
 mod global_menu;
 mod graphics;

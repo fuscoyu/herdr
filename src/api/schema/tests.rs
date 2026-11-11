@@ -1461,25 +1461,25 @@ fn pane_link_resolve_round_trips() {
 }
 
 #[test]
-fn task_group_request_shapes_are_additive_and_round_trip() {
+fn group_request_shapes_are_additive_and_round_trip() {
     for (method, params) in [
-        ("task_group.list", serde_json::json!({})),
-        ("task_group.create", serde_json::json!({"label":"Release"})),
+        ("group.list", serde_json::json!({})),
+        ("group.create", serde_json::json!({"label":"Release"})),
         (
-            "task_group.create",
+            "group.create",
             serde_json::json!({"label":"Release","workspace_id":"w1"}),
         ),
         (
-            "task_group.rename",
+            "group.rename",
             serde_json::json!({"group_id":"g1","label":"Review"}),
         ),
-        ("task_group.delete", serde_json::json!({"group_id":"g1"})),
+        ("group.delete", serde_json::json!({"group_id":"g1"})),
         (
-            "task_group.assign",
+            "group.assign",
             serde_json::json!({"workspace_id":"w1","group_id":"g1"}),
         ),
         (
-            "task_group.assign",
+            "group.assign",
             serde_json::json!({"workspace_id":"w1","group_id":null}),
         ),
     ] {
@@ -1488,20 +1488,20 @@ fn task_group_request_shapes_are_additive_and_round_trip() {
         assert_eq!(serde_json::to_value(request).unwrap(), json);
     }
     let request: Request = serde_json::from_value(serde_json::json!({
-        "id":"unassign", "method":"task_group.assign", "params":{"workspace_id":"w1"},
+        "id":"unassign", "method":"group.assign", "params":{"workspace_id":"w1"},
     }))
     .unwrap();
     assert!(matches!(
         request.method,
-        Method::TaskGroupAssign(TaskGroupAssignParams { group_id: None, .. })
+        Method::GroupAssign(GroupAssignParams { group_id: None, .. })
     ));
     for (method, params) in [
-        ("task_group.create", serde_json::json!({})),
-        ("task_group.rename", serde_json::json!({"group_id":"g1"})),
-        ("task_group.delete", serde_json::json!({})),
-        ("task_group.assign", serde_json::json!({"group_id":"g1"})),
+        ("group.create", serde_json::json!({})),
+        ("group.rename", serde_json::json!({"group_id":"g1"})),
+        ("group.delete", serde_json::json!({})),
+        ("group.assign", serde_json::json!({"group_id":"g1"})),
         (
-            "task_group.assign",
+            "group.assign",
             serde_json::json!({"workspace_id":"w1","group_id":1}),
         ),
     ] {
@@ -1513,26 +1513,18 @@ fn task_group_request_shapes_are_additive_and_round_trip() {
 }
 
 #[test]
-fn task_group_methods_are_named_admitted_and_mark_mutations_for_presentation() {
+fn group_methods_are_named_admitted_and_mark_mutations_for_presentation() {
     for (name, params, changes_ui) in [
-        ("task_group.list", serde_json::json!({}), false),
+        ("group.list", serde_json::json!({}), false),
+        ("group.create", serde_json::json!({"label":"Release"}), true),
         (
-            "task_group.create",
-            serde_json::json!({"label":"Release"}),
-            true,
-        ),
-        (
-            "task_group.rename",
+            "group.rename",
             serde_json::json!({"group_id":"g1","label":"Review"}),
             true,
         ),
+        ("group.delete", serde_json::json!({"group_id":"g1"}), true),
         (
-            "task_group.delete",
-            serde_json::json!({"group_id":"g1"}),
-            true,
-        ),
-        (
-            "task_group.assign",
+            "group.assign",
             serde_json::json!({"workspace_id":"w1","group_id":"g1"}),
             true,
         ),

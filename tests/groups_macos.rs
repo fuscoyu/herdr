@@ -5,7 +5,7 @@
 
 pub mod support;
 
+#[path = "cli/groups.rs"]
+mod groups;
 #[path = "cli/harness.rs"]
 mod harness;
-#[path = "cli/task_groups.rs"]
-mod task_groups;

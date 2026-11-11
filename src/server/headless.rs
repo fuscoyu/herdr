@@ -2007,13 +2007,13 @@ impl HeadlessServer {
                         return false;
                     }
                 };
-                let task_groups_message = if seed_snapshot.task_groups.is_empty() {
+                let groups_message = if seed_snapshot.groups.is_empty() {
                     None
                 } else {
-                    match crate::protocol::endpoint::task_groups_message(&seed_snapshot) {
+                    match crate::protocol::endpoint::groups_message(&seed_snapshot) {
                         Ok(message) => Some(message),
                         Err(err) => {
-                            warn!(client_id, err = %err, "failed to encode endpoint task groups");
+                            warn!(client_id, err = %err, "failed to encode endpoint groups");
                             return false;
                         }
                     }
@@ -2040,7 +2040,7 @@ impl HeadlessServer {
                 if let Some(message) = projection_message {
                     self.send_to_client(client_id, message);
                 }
-                if let Some(message) = task_groups_message {
+                if let Some(message) = groups_message {
                     self.send_to_client(client_id, message);
                 }
                 if let Some(message) = git_heads_message {

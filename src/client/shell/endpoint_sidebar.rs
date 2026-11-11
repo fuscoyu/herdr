@@ -268,7 +268,7 @@ pub(super) fn render_expanded(
 
     enum Row {
         Endpoint(usize),
-        TaskGroup {
+        Group {
             endpoint: usize,
             group: usize,
         },
@@ -290,7 +290,7 @@ pub(super) fn render_expanded(
                 super::sidebar::sidebar_entries(snapshot, collapsed_groups)
                     .into_iter()
                     .map(|row| match row {
-                        super::sidebar::SidebarEntry::TaskGroup(group) => Row::TaskGroup {
+                        super::sidebar::SidebarEntry::Group(group) => Row::Group {
                             endpoint: endpoint_index,
                             group,
                         },
@@ -314,7 +314,7 @@ pub(super) fn render_expanded(
     let row_heights = rows
         .iter()
         .map(|row| match row {
-            Row::Endpoint(_) | Row::TaskGroup { .. } => 1,
+            Row::Endpoint(_) | Row::Group { .. } => 1,
             Row::Workspace { endpoint, entry } => {
                 let endpoint = &state.endpoints[*endpoint];
                 let collapsed_groups = collapsed_groups_for_endpoint(state, &endpoint.endpoint_id)
@@ -327,7 +327,7 @@ pub(super) fn render_expanded(
                         Some(
                             super::sidebar::workspace_rows(
                                 workspace,
-                                if entry.task_group {
+                                if entry.group {
                                     workspace.agent_status
                                 } else {
                                     super::sidebar::displayed_workspace_status(
@@ -386,7 +386,7 @@ pub(super) fn render_expanded(
                         }
                     })
             }
-            Row::Endpoint(_) | Row::TaskGroup { .. } => false,
+            Row::Endpoint(_) | Row::Group { .. } => false,
         });
         if let Some(selected_row) = selected_row {
             *state.workspace_scroll = super::scroll::list_scroll_start_to_reveal(
@@ -446,7 +446,7 @@ pub(super) fn render_expanded(
                     .saturating_add(1)
                     .saturating_add(gaps.get(row_index).copied().unwrap_or(0));
             }
-            Row::TaskGroup { endpoint, group } => {
+            Row::Group { endpoint, group } => {
                 if y >= body.bottom() {
                     break;
                 }
@@ -454,13 +454,13 @@ pub(super) fn render_expanded(
                 let Some(group) = endpoint
                     .snapshot
                     .as_deref()
-                    .and_then(|snapshot| snapshot.task_groups.get(*group))
+                    .and_then(|snapshot| snapshot.groups.get(*group))
                 else {
                     continue;
                 };
                 let collapsed_groups = collapsed_groups_for_endpoint(state, &endpoint.endpoint_id)
                     .unwrap_or(&empty_collapsed_groups);
-                super::task_groups::render_group_header(
+                super::groups::render_group_header(
                     buffer,
                     Rect::new(
                         body.x.saturating_add(2),
@@ -469,7 +469,7 @@ pub(super) fn render_expanded(
                         1,
                     ),
                     group,
-                    collapsed_groups.contains(&super::task_groups::collapse_key(&group.id)),
+                    collapsed_groups.contains(&super::groups::collapse_key(&group.id)),
                     &endpoint.endpoint_id,
                     palette,
                     hits,
@@ -488,7 +488,7 @@ pub(super) fn render_expanded(
                 };
                 let collapsed_groups = collapsed_groups_for_endpoint(state, &endpoint.endpoint_id)
                     .unwrap_or(&empty_collapsed_groups);
-                let status = if entry.task_group {
+                let status = if entry.group {
                     workspace.agent_status
                 } else {
                     super::sidebar::displayed_workspace_status(
@@ -535,7 +535,7 @@ pub(super) fn render_expanded(
                             .add_modifier(Modifier::DIM),
                     );
                 }
-                let group_toggle = if entry.task_group {
+                let group_toggle = if entry.group {
                     None
                 } else {
                     super::sidebar::render_parent_group_toggle(

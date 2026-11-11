@@ -2103,14 +2103,10 @@ async fn run_client_loop(
                                 }
                                 continue;
                             }
-                            Ok(endpoint::EndpointControlMessage::TaskGroups(projection)) => {
+                            Ok(endpoint::EndpointControlMessage::Groups(projection)) => {
                                 let frame = state.shell.as_mut().and_then(|shell| {
                                     shell
-                                        .set_endpoint_task_groups(
-                                            &endpoint_id,
-                                            generation,
-                                            projection,
-                                        )
+                                        .set_endpoint_groups(&endpoint_id, generation, projection)
                                         .then(|| {
                                             shell.compose(
                                                 state.reported_size.0,

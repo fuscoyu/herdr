@@ -31,10 +31,10 @@ pub const AGENT_VIEW_PROJECTION_CAPABILITY: &str = "agent_view_projection";
 pub const AGENT_VIEW_PROJECTION_KIND: &str = "endpoint.agent-view.v1";
 pub const AGENT_COMPLETIONS_CAPABILITY: &str = "agent_completions";
 pub const AGENT_COMPLETIONS_KIND: &str = "endpoint.agent-completions.v1";
-pub const TASK_GROUPS_CAPABILITY: &str = "task_groups";
+pub const GROUPS_CAPABILITY: &str = "groups";
 pub const WORKSPACE_GIT_HEADS_CAPABILITY: &str = "workspace_git_heads";
 pub const WORKSPACE_GIT_HEADS_KIND: &str = "endpoint.workspace-git-heads.v1";
-pub const TASK_GROUPS_KIND: &str = "endpoint.task-groups.v1";
+pub const GROUPS_KIND: &str = "endpoint.groups.v1";
 
 /// Explicit detached HEAD facts from the server's cached Git refresh.
 /// Missing data means unknown, never detached. Separate from the frozen core codec.
@@ -61,20 +61,20 @@ pub fn workspace_git_heads_message(
 
 /// Optional revision-bound session organization, separate from the frozen snapshot codec.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EndpointTaskGroups {
+pub struct EndpointGroups {
     pub boot_id: String,
     pub revision: u64,
     #[serde(default)]
-    pub task_groups: Vec<crate::task_groups::TaskGroup>,
+    pub groups: Vec<crate::groups::Group>,
 }
 
-pub fn task_groups_message(snapshot: &ClientShellSnapshot) -> serde_json::Result<ServerMessage> {
+pub fn groups_message(snapshot: &ClientShellSnapshot) -> serde_json::Result<ServerMessage> {
     Ok(ServerMessage::EndpointControl {
-        kind: TASK_GROUPS_KIND.into(),
-        data: serde_json::to_string(&EndpointTaskGroups {
+        kind: GROUPS_KIND.into(),
+        data: serde_json::to_string(&EndpointGroups {
             boot_id: snapshot.boot_id.clone(),
             revision: snapshot.revision,
-            task_groups: snapshot.task_groups.clone(),
+            groups: snapshot.groups.clone(),
         })?,
     })
 }
@@ -221,7 +221,7 @@ impl EndpointServerWelcome {
                 HEALTH_CHECK_CAPABILITY.into(),
                 AGENT_VIEW_PROJECTION_CAPABILITY.into(),
                 AGENT_COMPLETIONS_CAPABILITY.into(),
-                TASK_GROUPS_CAPABILITY.into(),
+                GROUPS_CAPABILITY.into(),
                 WORKSPACE_GIT_HEADS_CAPABILITY.into(),
             ],
             error: None,
@@ -291,7 +291,7 @@ mod tests {
             tab_bar_right_separator: String::new(),
             agent_view_label: None,
             agent_order: Vec::new(),
-            task_groups: Vec::new(),
+            groups: Vec::new(),
             detached_workspace_ids: Vec::new(),
             workspaces: Vec::new(),
             tabs: Vec::new(),
@@ -358,10 +358,10 @@ mod tests {
     }
 
     #[test]
-    fn task_groups_do_not_change_frozen_snapshot_json_or_binary() {
+    fn groups_do_not_change_frozen_snapshot_json_or_binary() {
         let baseline = snapshot();
         let mut grouped = baseline.clone();
-        grouped.task_groups.push(crate::task_groups::TaskGroup {
+        grouped.groups.push(crate::groups::Group {
             id: "group-one".into(),
             label: "Ship feature".into(),
             workspace_ids: vec!["workspace-one".into()],
@@ -374,9 +374,9 @@ mod tests {
             .unwrap()
             .as_object()
             .unwrap()
-            .contains_key("task_groups"));
+            .contains_key("groups"));
         let decoded: ClientShellSnapshot = serde_json::from_str(&json).unwrap();
-        assert!(decoded.task_groups.is_empty());
+        assert!(decoded.groups.is_empty());
         let binary = bincode::serde::encode_to_vec(&grouped, bincode::config::standard()).unwrap();
         assert_eq!(
             binary,
@@ -416,22 +416,22 @@ mod tests {
     }
 
     #[test]
-    fn task_groups_use_optional_revision_bound_control() {
+    fn groups_use_optional_revision_bound_control() {
         let mut snapshot = snapshot();
-        snapshot.task_groups.push(crate::task_groups::TaskGroup {
+        snapshot.groups.push(crate::groups::Group {
             id: "group-one".into(),
             label: "Ship feature".into(),
             workspace_ids: vec!["workspace-one".into()],
         });
-        let ServerMessage::EndpointControl { kind, data } = task_groups_message(&snapshot).unwrap()
+        let ServerMessage::EndpointControl { kind, data } = groups_message(&snapshot).unwrap()
         else {
-            panic!("task groups should use optional endpoint control");
+            panic!("groups should use optional endpoint control");
         };
-        assert_eq!(kind, TASK_GROUPS_KIND);
-        let decoded: EndpointTaskGroups = serde_json::from_str(&data).unwrap();
+        assert_eq!(kind, GROUPS_KIND);
+        let decoded: EndpointGroups = serde_json::from_str(&data).unwrap();
         assert_eq!(decoded.boot_id, snapshot.boot_id);
         assert_eq!(decoded.revision, snapshot.revision);
-        assert_eq!(decoded.task_groups, snapshot.task_groups);
+        assert_eq!(decoded.groups, snapshot.groups);
     }
 
     #[test]
@@ -513,7 +513,7 @@ mod tests {
                 HEALTH_CHECK_CAPABILITY.to_string(),
                 AGENT_VIEW_PROJECTION_CAPABILITY.to_string(),
                 AGENT_COMPLETIONS_CAPABILITY.to_string(),
-                TASK_GROUPS_CAPABILITY.to_string(),
+                GROUPS_CAPABILITY.to_string(),
                 WORKSPACE_GIT_HEADS_CAPABILITY.to_string(),
             ]
         );

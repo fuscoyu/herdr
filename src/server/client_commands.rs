@@ -15,6 +15,11 @@ const ENDPOINT_RESPONSE_CHUNK_BYTES: usize = 512 * 1024;
 const CLIENT_SHELL_METHODS: &[&str] = &[
     "client_shell.surface.set",
     "command.invoke",
+    "group.assign",
+    "group.create",
+    "group.delete",
+    "group.list",
+    "group.rename",
     "integration.install",
     "integration.list",
     "layout.set_split_ratio",
@@ -43,11 +48,6 @@ const CLIENT_SHELL_METHODS: &[&str] = &[
     "tab.focus",
     "tab.move",
     "tab.rename",
-    "task_group.assign",
-    "task_group.create",
-    "task_group.delete",
-    "task_group.list",
-    "task_group.rename",
     "workspace.close",
     "workspace.create",
     "workspace.focus",
@@ -303,27 +303,27 @@ mod tests {
             Some("f5e4a3e01453ae7b188f127ce951c12c20e0bebcc17cc364eeb6d1a01fd5bf81")
         );
 
-        // Task groups are additive JSON methods, independent of the frozen v1 codecs.
+        // Groups are additive JSON methods, independent of the frozen v1 codecs.
         for (method, digest) in [
             (
-                "task_group.list",
-                "aea97a49a174b2cd4c4092a8b1108a101b70628fb868254216c4bfa235e53bb5",
+                "group.list",
+                "c39f79080d1ea874ea0f8c49113b6c32665d3a7f18f6797a9a9739eba07eeb96",
             ),
             (
-                "task_group.create",
-                "35f01122bf3a6ec2a453e9f878842d8f7846c34462a4273d450d6f86d08d4ca9",
+                "group.create",
+                "8e3f02b3fa520d3626c4c7a66b05df885a7bdf38172f0d172099de45cabbee20",
             ),
             (
-                "task_group.rename",
-                "298cd34b80cec1d4013a19ffaeefc612aac1068902e82d31ecd7555b621cf553",
+                "group.rename",
+                "dcd6a6e1c883fa18bd726246dc64a75451d7f7aacb24830127f3bf83018e42c4",
             ),
             (
-                "task_group.delete",
-                "a61f1d423c1a8e3147d1b220c5d199c51b348cd77c3703c9b0fc574e55212025",
+                "group.delete",
+                "685ed150366e25b1c02e266fa1d0a502062c9d75630206e0eb6a023f3581c94d",
             ),
             (
-                "task_group.assign",
-                "3165fd5c9903fd54ac73f69bf43a937e4592c557cfb852dbf704339de998d8d8",
+                "group.assign",
+                "701483b38f01158f3ea56d79d5ef53b4e844118a9983c45e68daaa01b72c1bfe",
             ),
         ] {
             assert_eq!(actual.remove(method).as_deref(), Some(digest), "{method}");

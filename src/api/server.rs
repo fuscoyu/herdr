@@ -705,11 +705,11 @@ pub(crate) fn api_method_name(method: &Method) -> &'static str {
         Method::PluginPaneOpen(_) => "plugin.pane.open",
         Method::PluginPaneFocus(_) => "plugin.pane.focus",
         Method::PluginPaneClose(_) => "plugin.pane.close",
-        Method::TaskGroupList(_) => "task_group.list",
-        Method::TaskGroupCreate(_) => "task_group.create",
-        Method::TaskGroupRename(_) => "task_group.rename",
-        Method::TaskGroupDelete(_) => "task_group.delete",
-        Method::TaskGroupAssign(_) => "task_group.assign",
+        Method::GroupList(_) => "group.list",
+        Method::GroupCreate(_) => "group.create",
+        Method::GroupRename(_) => "group.rename",
+        Method::GroupDelete(_) => "group.delete",
+        Method::GroupAssign(_) => "group.assign",
     }
 }
 

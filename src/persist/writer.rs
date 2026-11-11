@@ -40,10 +40,12 @@ impl SessionWriter {
         snapshot: &SessionSnapshot,
         history: Option<&SessionHistorySnapshot>,
     ) {
-        let result = self.preserve_unloaded().and_then(|()| {
-            self.preserve_snapshot_history();
-            super::io::save_to_path(&self.path, snapshot)
-        });
+        let result = super::io::validate_existing_session(&self.path)
+            .and_then(|()| self.preserve_unloaded())
+            .and_then(|()| {
+                self.preserve_snapshot_history();
+                super::io::save_to_path(&self.path, snapshot)
+            });
         if let Err(err) = result {
             crate::logging::session_save_failed(&self.path, &err.to_string());
             return;
@@ -59,10 +61,12 @@ impl SessionWriter {
     }
 
     pub(crate) fn clear(&mut self) {
-        let result = self.preserve_unloaded().and_then(|()| {
-            self.preserve_snapshot_history();
-            super::io::clear_path(&self.path)
-        });
+        let result = super::io::validate_existing_session(&self.path)
+            .and_then(|()| self.preserve_unloaded())
+            .and_then(|()| {
+                self.preserve_snapshot_history();
+                super::io::clear_path(&self.path)
+            });
         if let Err(err) = result {
             crate::logging::session_clear_failed(&self.path, &err.to_string());
             return;
@@ -288,6 +292,48 @@ mod tests {
         }
     }
 
+    #[test]
+    fn incompatible_sessions_block_save_and_clear_without_side_effects() {
+        for protect_unloaded in [false, true] {
+            for original in [
+                br#"{"version":3,"workspaces":[],"unsupported_organization":[{"id":"g1"}]}"#
+                    .as_slice(),
+                br#"{"version":999,"workspaces":[]}"#.as_slice(),
+                b"invalid utf8 \xff".as_slice(),
+            ] {
+                let mut writer = writer(protect_unloaded);
+                std::fs::write(&writer.path, original).unwrap();
+                let history = writer.path.with_file_name("session-history.json");
+                std::fs::write(&history, b"original history").unwrap();
+                writer.save(&snapshot(), None);
+                writer.clear();
+                assert_eq!(std::fs::read(&writer.path).unwrap(), original);
+                assert_eq!(std::fs::read(&history).unwrap(), b"original history");
+                assert_eq!(writer.protect_unloaded, protect_unloaded);
+                assert!(backups(&writer).is_empty());
+                assert!(!writer.path.with_file_name("session-snapshots").exists());
+                assert!(!writer.path.with_extension("json.tmp").exists());
+                std::fs::remove_dir_all(writer.path.parent().unwrap()).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn recovery_copy_preserves_arbitrary_bytes_without_mutating_source() {
+        let mut writer = writer(true);
+        let original = b"invalid utf8 \xff";
+        std::fs::write(&writer.path, original).unwrap();
+        writer.preserve_unloaded().unwrap();
+        assert_eq!(std::fs::read(&writer.path).unwrap(), original);
+        assert_eq!(backups(&writer), vec![original.to_vec()]);
+        std::fs::remove_dir_all(writer.path.parent().unwrap()).unwrap();
+    }
+
+    fn recovery_fixture(selected: u8) -> Vec<u8> {
+        format!(r#"{{"version":3,"workspaces":[],"active":null,"selected":{selected}}}"#)
+            .into_bytes()
+    }
+
     fn snapshot() -> SessionSnapshot {
         serde_json::from_str(include_str!(
             "../../tests/fixtures/session/current-herdr-session.json"
@@ -469,9 +515,9 @@ mod tests {
 
     #[test]
     fn failed_recovery_blocks_mutations_then_retries_preserving_exact_bytes_once() {
-        let original = b"invalid utf8 \xff";
+        let original = recovery_fixture(7);
         let mut writer = writer(true);
-        std::fs::write(&writer.path, original).unwrap();
+        std::fs::write(&writer.path, &original).unwrap();
         let history_path = writer.path.with_file_name("session-history.json");
         std::fs::write(&history_path, b"history").unwrap();
         let directory = writer.path.with_file_name("session-backups");
@@ -528,7 +574,7 @@ mod tests {
         std::fs::write(&manual, b"manual recovery copy").unwrap();
         for i in 0..5u8 {
             writer.protect_unloaded = true;
-            std::fs::write(&writer.path, [i]).unwrap();
+            std::fs::write(&writer.path, recovery_fixture(i)).unwrap();
             writer.save(&snapshot(), None);
         }
         assert_eq!(std::fs::read(manual).unwrap(), b"manual recovery copy");
@@ -541,25 +587,25 @@ mod tests {
         let mut writer = writer(true);
         writer.clear();
         assert!(writer.protect_unloaded);
-        std::fs::write(&writer.path, b"late layout").unwrap();
+        std::fs::write(&writer.path, recovery_fixture(8)).unwrap();
         writer.clear();
         assert!(!writer.path.exists());
-        assert_eq!(backups(&writer), vec![b"late layout".to_vec()]);
+        assert_eq!(backups(&writer), vec![recovery_fixture(8)]);
         std::fs::remove_dir_all(writer.path.parent().unwrap()).unwrap();
     }
 
     #[test]
     fn repeated_failed_saves_do_not_replace_a_completed_recovery_copy() {
         let mut writer = writer(true);
-        std::fs::write(&writer.path, b"original").unwrap();
+        std::fs::write(&writer.path, recovery_fixture(9)).unwrap();
         let temporary = writer.path.with_extension("json.tmp");
         std::fs::create_dir(&temporary).unwrap();
         writer.save(&snapshot(), None);
         writer.save(&snapshot(), None);
-        assert_eq!(std::fs::read(&writer.path).unwrap(), b"original");
+        assert_eq!(std::fs::read(&writer.path).unwrap(), recovery_fixture(9));
         std::fs::remove_dir(&temporary).unwrap();
         writer.save(&snapshot(), None);
-        assert_eq!(backups(&writer), vec![b"original".to_vec()]);
+        assert_eq!(backups(&writer), vec![recovery_fixture(9)]);
         std::fs::remove_dir_all(writer.path.parent().unwrap()).unwrap();
     }
 
@@ -608,16 +654,23 @@ mod tests {
         for i in 0..2u8 {
             std::fs::write(
                 directory.join(format!("session-{:039}-1-0.json", future + u128::from(i))),
-                [i],
+                recovery_fixture(i),
             )
             .unwrap();
         }
         for i in 2..4u8 {
             writer.protect_unloaded = true;
-            std::fs::write(&writer.path, [i]).unwrap();
+            std::fs::write(&writer.path, recovery_fixture(i)).unwrap();
             writer.save(&snapshot(), None);
         }
-        assert_eq!(backups(&writer), vec![vec![1], vec![2], vec![3]]);
+        assert_eq!(
+            backups(&writer),
+            vec![
+                recovery_fixture(1),
+                recovery_fixture(2),
+                recovery_fixture(3)
+            ]
+        );
         std::fs::remove_dir_all(writer.path.parent().unwrap()).unwrap();
     }
 
@@ -626,13 +679,27 @@ mod tests {
         let mut writer = writer(true);
         for i in 0..5u8 {
             writer.protect_unloaded = true;
-            std::fs::write(&writer.path, [i]).unwrap();
+            std::fs::write(&writer.path, recovery_fixture(i)).unwrap();
             writer.save(&snapshot(), None);
         }
-        assert_eq!(backups(&writer), vec![vec![2], vec![3], vec![4]]);
+        assert_eq!(
+            backups(&writer),
+            vec![
+                recovery_fixture(2),
+                recovery_fixture(3),
+                recovery_fixture(4)
+            ]
+        );
         writer.save(&snapshot(), None);
         writer.clear();
-        assert_eq!(backups(&writer), vec![vec![2], vec![3], vec![4]]);
+        assert_eq!(
+            backups(&writer),
+            vec![
+                recovery_fixture(2),
+                recovery_fixture(3),
+                recovery_fixture(4)
+            ]
+        );
         std::fs::remove_dir_all(writer.path.parent().unwrap()).unwrap();
     }
 
@@ -645,7 +712,7 @@ mod tests {
             let target = writer.path.with_file_name("target.json");
             symlink("target.json", &writer.path).unwrap();
             if late_target {
-                std::fs::write(&target, b"late layout").unwrap();
+                std::fs::write(&target, recovery_fixture(8)).unwrap();
             }
             writer.save(&snapshot(), None);
             assert!(std::fs::symlink_metadata(&writer.path)
@@ -654,7 +721,7 @@ mod tests {
                 .is_symlink());
             assert!(target.exists());
             if late_target {
-                assert_eq!(backups(&writer), vec![b"late layout".to_vec()]);
+                assert_eq!(backups(&writer), vec![recovery_fixture(8)]);
                 let backup = std::fs::read_dir(writer.path.with_file_name("session-backups"))
                     .unwrap()
                     .next()

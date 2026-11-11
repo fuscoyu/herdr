@@ -42,7 +42,26 @@ fn resolve_write_target(path: &Path) -> std::io::Result<PathBuf> {
     Ok(current)
 }
 
+pub(super) fn validate_existing_session(path: &Path) -> std::io::Result<()> {
+    // Never overwrite organization or other fields this version cannot restore.
+    // This also protects the original file when an incompatible session is ignored at startup.
+    match std::fs::read_to_string(path) {
+        Ok(content) => {
+            parse_snapshot(&content).map_err(|err| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("refusing to modify an unsupported session; back up and migrate it first: {err}"),
+                )
+            })?;
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err),
+    }
+    Ok(())
+}
+
 pub(super) fn save_to_path(path: &Path, snapshot: &SessionSnapshot) -> std::io::Result<()> {
+    validate_existing_session(path)?;
     save_json_to_path(path, snapshot)
 }
 
@@ -198,7 +217,7 @@ mod tests {
             sidebar_width: Some(26),
             sidebar_section_split: Some(0.5),
             collapsed_space_keys: std::collections::HashSet::new(),
-            task_groups: Vec::new(),
+            groups: Vec::new(),
         }
     }
 
@@ -218,6 +237,19 @@ mod tests {
                 }],
             }],
         }
+    }
+
+    #[test]
+    fn save_refuses_to_overwrite_unknown_session_fields() {
+        let path = temp_session_path("unknown-organization");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let original = r#"{"version":3,"workspaces":[],"active":null,"selected":0,"unsupported_organization":[{"id":"g1"}]}"#;
+        std::fs::write(&path, original).unwrap();
+        assert!(parse_snapshot(original).is_err());
+        let error = save_to_path(&path, &empty_snapshot()).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        assert!(!path.with_extension("json.tmp").exists());
     }
 
     #[test]

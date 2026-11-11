@@ -1,8 +1,8 @@
 use clap::{Arg, Command};
 
 use crate::api::schema::{
-    EmptyParams, Method, Request, TaskGroupAssignParams, TaskGroupCreateParams,
-    TaskGroupRenameParams, TaskGroupTarget,
+    EmptyParams, GroupAssignParams, GroupCreateParams, GroupRenameParams, GroupTarget, Method,
+    Request,
 };
 
 pub(crate) fn command() -> Command {
@@ -19,7 +19,7 @@ pub(crate) fn command() -> Command {
         .subcommand(
             Command::new("create")
                 .about("Create a named group, optionally with a workspace")
-                .arg(Arg::new("label").value_name("LABEL").required(true))
+                .arg(Arg::new("label").value_name("GROUP_NAME").required(true))
                 .arg(
                     Arg::new("workspace")
                         .long("workspace")
@@ -32,7 +32,7 @@ pub(crate) fn command() -> Command {
                 .arg(group_id())
                 .arg(
                     Arg::new("label")
-                        .value_name("LABEL")
+                        .value_name("GROUP_NAME")
                         .required(true)
                         .num_args(1..)
                         .trailing_var_arg(true)
@@ -68,14 +68,14 @@ fn request(args: &[String]) -> Result<Request, clap::Error> {
             .clone()
     };
     let method = match name {
-        "list" => Method::TaskGroupList(EmptyParams {}),
-        "create" => Method::TaskGroupCreate(TaskGroupCreateParams {
+        "list" => Method::GroupList(EmptyParams {}),
+        "create" => Method::GroupCreate(GroupCreateParams {
             label: value("label"),
             workspace_id: matches
                 .get_one::<String>("workspace")
                 .map(|id| super::normalize_workspace_id(id)),
         }),
-        "rename" => Method::TaskGroupRename(TaskGroupRenameParams {
+        "rename" => Method::GroupRename(GroupRenameParams {
             group_id: value("group_id"),
             label: matches
                 .get_many::<String>("label")
@@ -84,14 +84,14 @@ fn request(args: &[String]) -> Result<Request, clap::Error> {
                 .collect::<Vec<_>>()
                 .join(" "),
         }),
-        "delete" => Method::TaskGroupDelete(TaskGroupTarget {
+        "delete" => Method::GroupDelete(GroupTarget {
             group_id: value("group_id"),
         }),
-        "add" => Method::TaskGroupAssign(TaskGroupAssignParams {
+        "add" => Method::GroupAssign(GroupAssignParams {
             group_id: Some(value("group_id")),
             workspace_id: super::normalize_workspace_id(&value("workspace_id")),
         }),
-        "remove" => Method::TaskGroupAssign(TaskGroupAssignParams {
+        "remove" => Method::GroupAssign(GroupAssignParams {
             group_id: None,
             workspace_id: super::normalize_workspace_id(&value("workspace_id")),
         }),
@@ -123,37 +123,37 @@ mod tests {
     }
 
     #[test]
-    fn task_group_cli_projects_all_commands_to_json_api() {
+    fn group_cli_projects_all_commands_to_json_api() {
         for (args, method, params) in [
-            (vec!["list"], "task_group.list", serde_json::json!({})),
+            (vec!["list"], "group.list", serde_json::json!({})),
             (
                 vec!["create", "Cross-repo change"],
-                "task_group.create",
+                "group.create",
                 serde_json::json!({"label":"Cross-repo change"}),
             ),
             (
                 vec!["create", "Release", "--workspace=w2"],
-                "task_group.create",
+                "group.create",
                 serde_json::json!({"label":"Release","workspace_id":"w2"}),
             ),
             (
                 vec!["rename", "g1", "Release", "review"],
-                "task_group.rename",
+                "group.rename",
                 serde_json::json!({"group_id":"g1","label":"Release review"}),
             ),
             (
                 vec!["delete", "g1"],
-                "task_group.delete",
+                "group.delete",
                 serde_json::json!({"group_id":"g1"}),
             ),
             (
                 vec!["add", "g1", "2"],
-                "task_group.assign",
+                "group.assign",
                 serde_json::json!({"group_id":"g1","workspace_id":"2"}),
             ),
             (
                 vec!["remove", "w2"],
-                "task_group.assign",
+                "group.assign",
                 serde_json::json!({"group_id":null,"workspace_id":"w2"}),
             ),
         ] {
@@ -165,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn task_group_cli_rejects_invalid_grammar_before_transport() {
+    fn group_cli_rejects_invalid_grammar_before_transport() {
         for args in [
             vec![],
             vec!["unknown"],

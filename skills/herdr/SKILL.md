@@ -45,7 +45,7 @@ Do not run bare `herdr` for discovery; it launches or attaches the TUI. Do not p
 
 Most control commands return JSON. Read identifiers and state from those responses instead of predicting them.
 
-## Custom fork: task groups and Navigator
+## Custom fork: groups and Navigator
 
 This section describes the Group/Navigator extension in this fork based on v0.9.5, not a guarantee that upstream or an older installed binary supports it. Keep the `HERDR_ENV=1` check above. Discover support with `herdr group --help` before using group commands; if unavailable, report that limitation rather than guessing another command.
 
@@ -53,17 +53,19 @@ Groups are session-owned organization of existing workspaces, including workspac
 
 ```bash
 herdr group list
-herdr group create "Task name"
-herdr group create "Task name" --workspace WORKSPACE_ID
+herdr group create "Group name"
+herdr group create "Group name" --workspace WORKSPACE_ID
 herdr group add GROUP_ID WORKSPACE_ID
-herdr group rename GROUP_ID "New task name"
+herdr group rename GROUP_ID "New group name"
 herdr group remove WORKSPACE_ID
 herdr group delete GROUP_ID
 ```
 
 Replace uppercase placeholders with IDs returned by the CLI. Parse the standard JSON response and check for errors before proceeding. `add` moves a workspace out of its previous group; `remove` leaves it ungrouped. `delete` removes only the group, preserving workspaces, terminals, worktrees, and Git branches. Inspect current membership first and make only changes authorized by the user. Group operations do not authorize messaging or controlling another agent.
 
-For JSON API integrations, the corresponding methods are `task_group.list` with `{}`, `task_group.create` with `{"label":"Task name","workspace_id":"WORKSPACE_ID"}` (workspace optional), `task_group.rename` with `{"group_id":"GROUP_ID","label":"New task name"}`, `task_group.delete` with `{"group_id":"GROUP_ID"}`, and `task_group.assign` with `{"workspace_id":"WORKSPACE_ID","group_id":"GROUP_ID"}`. Set `group_id` to null to remove membership. Group records contain `id`, `label`, and `workspace_ids`. Check the selected server's advertised API support; do not assume a remote or older endpoint implements the extension.
+For JSON API integrations, the corresponding methods are `group.list` with `{}`, `group.create` with `{"label":"Group name","workspace_id":"WORKSPACE_ID"}` (workspace optional), `group.rename` with `{"group_id":"GROUP_ID","label":"New group name"}`, `group.delete` with `{"group_id":"GROUP_ID"}`, and `group.assign` with `{"workspace_id":"WORKSPACE_ID","group_id":"GROUP_ID"}`. Set `group_id` to null to remove membership. Group records contain `id`, `label`, and `workspace_ids`. Check the selected server's advertised API support; do not assume a remote or older endpoint implements the extension.
+
+This fork uses only the `group.*` API and `groups` session data. Earlier fork builds using a different group namespace are incompatible: update server and clients together. Back up existing session data before upgrading or downgrading. Unsupported session fields are rejected and the original session file is not overwritten; migrate a backed-up copy explicitly rather than deleting the original.
 
 The sidebar displays groups in creation order and members in assignment order, followed by ungrouped workspaces. Renaming does not reorder groups, and adding an existing member to its current group is a no-op. There is no dedicated manual group/member reorder command or drag-and-drop sorting. Do not delete and recreate groups just to reorder them unless explicitly asked, because group IDs change.
 

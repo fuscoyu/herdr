@@ -1,8 +1,8 @@
 use super::*;
-use crate::task_groups::TaskGroup;
+use crate::groups::Group;
 
-fn group(id: &str, label: &str, members: &[&str]) -> TaskGroup {
-    TaskGroup {
+fn group(id: &str, label: &str, members: &[&str]) -> Group {
+    Group {
         id: id.into(),
         label: label.into(),
         workspace_ids: members.iter().map(|id| (*id).to_owned()).collect(),
@@ -38,7 +38,7 @@ fn task_snapshot() -> ClientShellSnapshot {
         workspace
     })
     .collect();
-    snapshot.task_groups = vec![
+    snapshot.groups = vec![
         group("a", "Task A", &["bots_a", "common_a"]),
         group("b", "Task B", &["bots_b", "common_b"]),
         group("empty", "Empty task", &[]),
@@ -50,8 +50,8 @@ fn projected_ids(snapshot: &ClientShellSnapshot, collapsed: &HashSet<String>) ->
     sidebar::sidebar_entries(snapshot, collapsed)
         .into_iter()
         .map(|row| match row {
-            sidebar::SidebarEntry::TaskGroup(index) => {
-                format!("group:{}", snapshot.task_groups[index].id)
+            sidebar::SidebarEntry::Group(index) => {
+                format!("group:{}", snapshot.groups[index].id)
             }
             sidebar::SidebarEntry::Workspace(entry) => {
                 snapshot.workspaces[entry.index].workspace_id.clone()
@@ -87,7 +87,7 @@ fn activate_action(
 }
 
 #[test]
-fn task_groups_project_cross_repo_members_and_preserve_unassigned_worktrees() {
+fn groups_project_cross_repo_members_and_preserve_unassigned_worktrees() {
     let snapshot = task_snapshot();
     assert_eq!(
         projected_ids(&snapshot, &HashSet::new()),
@@ -132,16 +132,16 @@ fn task_groups_project_cross_repo_members_and_preserve_unassigned_worktrees() {
 }
 
 #[test]
-fn task_groups_collapse_hides_all_members_including_focused_and_expands_again() {
+fn groups_collapse_hides_all_members_including_focused_and_expands_again() {
     let mut snapshot = task_snapshot();
     snapshot.workspaces[0].focused = false;
     snapshot.workspaces[1].focused = true;
     snapshot.focused_workspace_id = Some("bots_a".into());
     // Duplicate/stale memberships are ignored even when their first group is collapsed.
-    snapshot.task_groups[1]
+    snapshot.groups[1]
         .workspace_ids
         .extend(["common_a".into(), "missing".into()]);
-    let collapsed = HashSet::from(["task-group:a".into(), "bots".into()]);
+    let collapsed = HashSet::from(["group:a".into(), "bots".into()]);
     assert_eq!(
         projected_ids(&snapshot, &collapsed),
         [
@@ -158,10 +158,7 @@ fn task_groups_collapse_hides_all_members_including_focused_and_expands_again() 
     assert!(navigation
         .iter()
         .all(|entry| snapshot.workspaces.get(entry.index).is_some()));
-    assert_eq!(
-        navigation.iter().filter(|entry| entry.task_group).count(),
-        2
-    );
+    assert_eq!(navigation.iter().filter(|entry| entry.group).count(), 2);
     let expanded = projected_ids(&snapshot, &HashSet::from(["bots".into()]));
     assert!(expanded.contains(&"bots_a".to_owned()));
     assert!(expanded.contains(&"common_a".to_owned()));
@@ -170,7 +167,7 @@ fn task_groups_collapse_hides_all_members_including_focused_and_expands_again() 
 }
 
 #[test]
-fn task_groups_separate_worktree_close_and_status_from_other_tasks() {
+fn groups_separate_worktree_close_and_status_from_other_tasks() {
     let mut snapshot = task_snapshot();
     snapshot.workspaces[1].agent_status = AgentStatus::Blocked;
     let collapsed = HashSet::from(["bots".into()]);
@@ -182,7 +179,7 @@ fn task_groups_separate_worktree_close_and_status_from_other_tasks() {
         sidebar::displayed_workspace_status(&snapshot, &snapshot.workspaces[0], &collapsed),
         AgentStatus::Idle
     );
-    snapshot.task_groups[0].workspace_ids.push("ws_1".into());
+    snapshot.groups[0].workspace_ids.push("ws_1".into());
     assert!(sidebar::parent_group_key(&snapshot, 0).is_none());
     assert!(!sidebar::workspace_close_is_group(
         &snapshot,
@@ -200,9 +197,9 @@ fn task_groups_separate_worktree_close_and_status_from_other_tasks() {
 }
 
 #[test]
-fn task_groups_render_headers_and_member_repository_labels_without_workspace_hits() {
+fn groups_render_headers_and_member_repository_labels_without_workspace_hits() {
     let mut state = task_state();
-    let frame = state.compose(120, 60).expect("task groups frame");
+    let frame = state.compose(120, 60).expect("groups frame");
     let text = frame
         .cells
         .iter()
@@ -213,16 +210,16 @@ fn task_groups_render_headers_and_member_repository_labels_without_workspace_hit
     }
     assert!(!text.contains("bots/taskA"));
     assert!(!text.contains("common/taskA"));
-    assert_eq!(state.hits.task_groups.len(), 3);
+    assert_eq!(state.hits.groups.len(), 3);
     assert_eq!(state.hits.workspaces.len(), 7);
-    for header in &state.hits.task_groups {
+    for header in &state.hits.groups {
         assert!(!state
             .hits
             .workspaces
             .iter()
             .any(|workspace| workspace.rect == header.rect));
     }
-    let header = state.hits.task_groups[0].rect;
+    let header = state.hits.groups[0].rect;
     let result = state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Left),
         column: header.x + 1,
@@ -231,15 +228,15 @@ fn task_groups_render_headers_and_member_repository_labels_without_workspace_hit
     })]);
     assert!(result.actions.is_empty());
     assert!(state.workspace_press.is_none());
-    assert!(state.collapsed_groups.contains("task-group:a"));
+    assert!(state.collapsed_groups.contains("group:a"));
     state.compose(120, 60).unwrap();
     assert!(!state
         .hits
         .workspaces
         .iter()
         .any(|hit| hit.workspace_id == "bots_a"));
-    assert_eq!(state.hits.task_groups.len(), 3);
-    let header = state.hits.task_groups[0].rect;
+    assert_eq!(state.hits.groups.len(), 3);
+    let header = state.hits.groups[0].rect;
     state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
         kind: MouseEventKind::Down(MouseButton::Right),
         column: header.x + 1,
@@ -248,13 +245,13 @@ fn task_groups_render_headers_and_member_repository_labels_without_workspace_hit
     })]);
     assert!(
         matches!(state.overlay, Some(ClientShellOverlay::ContextMenu(ClientContextMenuOverlay {
-        target: ClientContextMenuTarget::TaskGroup { ref group_id, .. }, ..
+        target: ClientContextMenuTarget::Group { ref group_id, .. }, ..
     })) if group_id == "a")
     );
 }
 
 #[test]
-fn task_groups_user_facing_menus_use_group_labels() {
+fn groups_user_facing_menus_use_group_labels() {
     let mut state = task_state();
     state.open_workspace_context_menu("bots_a".into(), 0, 0);
     let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
@@ -270,13 +267,13 @@ fn task_groups_user_facing_menus_use_group_labels() {
     }
     assert!(labels.iter().all(|label| !label.contains("task group")));
 
-    state.open_task_group_context_menu("a".into(), 0, 0);
+    state.open_group_context_menu("a".into(), 0, 0);
     let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
         panic!("group menu");
     };
     assert!(menu.items().iter().any(|item| item.label == "Rename group"));
 
-    state.open_task_groups_context_menu(2, 15);
+    state.open_groups_context_menu(2, 15);
     let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
         panic!("spaces menu");
     };
@@ -284,74 +281,74 @@ fn task_groups_user_facing_menus_use_group_labels() {
 }
 
 #[test]
-fn task_groups_context_actions_create_move_remove_rename_and_delete_only_metadata() {
+fn groups_context_actions_create_move_remove_rename_and_delete_only_metadata() {
     use crate::api::schema::Method;
     let mut state = task_state();
     state.open_workspace_context_menu("bots_a".into(), 0, 0);
-    activate_action(&mut state, ClientContextMenuAction::NewTaskGroup);
+    activate_action(&mut state, ClientContextMenuAction::NewGroup);
     let Some(ClientShellOverlay::Rename(rename)) = state.overlay.as_mut() else {
         panic!("create input");
     };
-    assert_eq!(rename.title, "new group");
+    assert_eq!(rename.title, "Group name");
     rename.input = TextEditor::new(" New task ", false);
     let mut created = ClientShellInput::default();
     state.save_rename_overlay(&mut created);
     assert!(
         matches!(&created.actions[..], [ClientShellAction::Endpoint { request, .. }]
-        if matches!(&request.method, Method::TaskGroupCreate(params)
+        if matches!(&request.method, Method::GroupCreate(params)
             if params.label == "New task" && params.workspace_id.as_deref() == Some("bots_a")))
     );
 
     state.open_workspace_context_menu("bots_a".into(), 0, 0);
-    activate_action(&mut state, ClientContextMenuAction::ChooseTaskGroup);
-    let moved = activate_action(&mut state, ClientContextMenuAction::AssignTaskGroup(0));
+    activate_action(&mut state, ClientContextMenuAction::ChooseGroup);
+    let moved = activate_action(&mut state, ClientContextMenuAction::AssignGroup(0));
     assert!(
         matches!(&moved.actions[..], [ClientShellAction::Endpoint { request, .. }]
-        if matches!(&request.method, Method::TaskGroupAssign(params)
+        if matches!(&request.method, Method::GroupAssign(params)
             if params.workspace_id == "bots_a" && params.group_id.as_deref() == Some("b")))
     );
 
     state.open_workspace_context_menu("bots_a".into(), 0, 0);
-    let removed = activate_action(&mut state, ClientContextMenuAction::RemoveFromTaskGroup);
+    let removed = activate_action(&mut state, ClientContextMenuAction::RemoveFromGroup);
     assert!(
         matches!(&removed.actions[..], [ClientShellAction::Endpoint { request, .. }]
-        if matches!(&request.method, Method::TaskGroupAssign(params)
+        if matches!(&request.method, Method::GroupAssign(params)
             if params.workspace_id == "bots_a" && params.group_id.is_none()))
     );
 
-    state.open_task_group_context_menu("a".into(), 0, 0);
+    state.open_group_context_menu("a".into(), 0, 0);
     activate_action(&mut state, ClientContextMenuAction::Rename);
     let Some(ClientShellOverlay::Rename(rename)) = state.overlay.as_mut() else {
         panic!("rename input");
     };
-    assert_eq!(rename.title, "rename group");
+    assert_eq!(rename.title, "Group name");
     rename.input = TextEditor::new("Renamed", false);
     let mut renamed = ClientShellInput::default();
     state.save_rename_overlay(&mut renamed);
     assert!(
         matches!(&renamed.actions[..], [ClientShellAction::Endpoint { request, .. }]
-        if matches!(&request.method, Method::TaskGroupRename(params)
+        if matches!(&request.method, Method::GroupRename(params)
             if params.group_id == "a" && params.label == "Renamed"))
     );
 
-    state.open_task_group_context_menu("a".into(), 0, 0);
-    let deleted = activate_action(&mut state, ClientContextMenuAction::DeleteTaskGroup);
+    state.open_group_context_menu("a".into(), 0, 0);
+    let deleted = activate_action(&mut state, ClientContextMenuAction::DeleteGroup);
     assert!(
         matches!(&deleted.actions[..], [ClientShellAction::Endpoint { request, .. }]
-        if matches!(&request.method, Method::TaskGroupDelete(target) if target.group_id == "a"))
+        if matches!(&request.method, Method::GroupDelete(target) if target.group_id == "a"))
     );
     assert_eq!(state.snapshot.as_ref().unwrap().workspaces.len(), 7);
 }
 
 #[test]
-fn task_groups_blank_area_menu_can_create_empty_group_and_escape_discards_input() {
+fn groups_blank_area_menu_can_create_empty_group_and_escape_discards_input() {
     let mut state = task_state();
-    state.open_task_groups_context_menu(2, 15);
-    activate_action(&mut state, ClientContextMenuAction::NewTaskGroup);
+    state.open_groups_context_menu(2, 15);
+    activate_action(&mut state, ClientContextMenuAction::NewGroup);
     assert!(matches!(
         state.overlay,
         Some(ClientShellOverlay::Rename(ClientRenameOverlay {
-            target: ClientRenameTarget::NewTaskGroup { workspace_id: None },
+            target: ClientRenameTarget::NewGroup { workspace_id: None },
             ..
         }))
     ));
@@ -361,12 +358,12 @@ fn task_groups_blank_area_menu_can_create_empty_group_and_escape_discards_input(
 }
 
 #[test]
-fn task_groups_missing_methods_hide_only_unsupported_group_actions() {
+fn groups_missing_methods_hide_only_unsupported_group_actions() {
     let mut state = task_state();
     state.set_endpoint_methods(Some(vec![
         "workspace.rename".into(),
         "workspace.close".into(),
-        "task_group.rename".into(),
+        "group.rename".into(),
     ]));
     state.open_workspace_context_menu("bots_a".into(), 0, 0);
     let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
@@ -378,11 +375,11 @@ fn task_groups_missing_methods_hide_only_unsupported_group_actions() {
         .any(|item| item.action == ClientContextMenuAction::Rename));
     assert!(!menu.items().iter().any(|item| matches!(
         item.action,
-        ClientContextMenuAction::NewTaskGroup
-            | ClientContextMenuAction::ChooseTaskGroup
-            | ClientContextMenuAction::RemoveFromTaskGroup
+        ClientContextMenuAction::NewGroup
+            | ClientContextMenuAction::ChooseGroup
+            | ClientContextMenuAction::RemoveFromGroup
     )));
-    state.open_task_group_context_menu("a".into(), 0, 0);
+    state.open_group_context_menu("a".into(), 0, 0);
     let Some(ClientShellOverlay::ContextMenu(menu)) = state.overlay.as_ref() else {
         panic!("group menu");
     };
@@ -397,13 +394,13 @@ fn task_groups_missing_methods_hide_only_unsupported_group_actions() {
     assert!(!menu
         .items()
         .iter()
-        .any(|item| item.action == ClientContextMenuAction::DeleteTaskGroup));
+        .any(|item| item.action == ClientContextMenuAction::DeleteGroup));
 }
 
 #[test]
-fn task_groups_long_picker_keeps_keyboard_selected_row_visible() {
+fn groups_long_picker_keeps_keyboard_selected_row_visible() {
     let menu = ClientContextMenuOverlay {
-        target: ClientContextMenuTarget::TaskGroupPicker {
+        target: ClientContextMenuTarget::GroupPicker {
             workspace_id: "ws_1".into(),
             groups: (0..30)
                 .map(|index| group(&index.to_string(), &format!("Task {index}"), &[]))
@@ -420,7 +417,7 @@ fn task_groups_long_picker_keeps_keyboard_selected_row_visible() {
 }
 
 #[test]
-fn task_groups_endpoint_headers_collapse_independently_and_hide_with_machine() {
+fn groups_endpoint_headers_collapse_independently_and_hide_with_machine() {
     use crate::client::endpoint::ProfileId;
     let mut state = task_state();
     let profile = SavedSshEndpoint {
@@ -439,7 +436,7 @@ fn task_groups_endpoint_headers_collapse_independently_and_hide_with_machine() {
     remote.workspaces[1].focused = true;
     remote.focused_workspace_id = Some("bots_a".into());
     state.set_endpoint_snapshot(&remote_id, Box::new(remote));
-    state.toggle_collapsed_group(&remote_id, "task-group:a".into());
+    state.toggle_collapsed_group(&remote_id, "group:a".into());
     let frame = state.compose(120, 90).unwrap();
     let text = frame
         .cells
@@ -461,25 +458,25 @@ fn task_groups_endpoint_headers_collapse_independently_and_hide_with_machine() {
     assert_eq!(
         state
             .hits
-            .task_groups
+            .groups
             .iter()
             .filter(|hit| hit.endpoint_id == remote_id)
             .count(),
         3
     );
-    assert!(!state.collapsed_groups.contains("task-group:a"));
+    assert!(!state.collapsed_groups.contains("group:a"));
     state.collapsed_endpoints.insert(remote_id.clone());
     state.compose(120, 90).unwrap();
     assert!(!state
         .hits
-        .task_groups
+        .groups
         .iter()
         .any(|hit| hit.endpoint_id == remote_id));
-    assert_eq!(state.hits.task_groups.len(), 3);
+    assert_eq!(state.hits.groups.len(), 3);
 }
 
 #[test]
-fn task_groups_preserve_unassigned_drag_but_never_drag_assigned_workspaces() {
+fn groups_preserve_unassigned_drag_but_never_drag_assigned_workspaces() {
     let mut state = task_state();
     assert!(
         state.endpoint_workspace_is_draggable(&ClientWorkspacePress {
@@ -541,9 +538,9 @@ fn task_groups_preserve_unassigned_drag_but_never_drag_assigned_workspaces() {
 }
 
 #[test]
-fn task_groups_empty_groups_preserve_existing_workspace_drag() {
+fn groups_empty_groups_preserve_existing_workspace_drag() {
     let mut snapshot = snapshot();
-    snapshot.task_groups = vec![group("empty", "Empty task", &[])];
+    snapshot.groups = vec![group("empty", "Empty task", &[])];
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     state.set_snapshot(Box::new(snapshot));
     assert!(
@@ -557,38 +554,35 @@ fn task_groups_empty_groups_preserve_existing_workspace_drag() {
 }
 
 #[test]
-fn task_groups_mouse_capture_off_removes_group_hits() {
+fn groups_mouse_capture_off_removes_group_hits() {
     let mut state = task_state();
     state.config.mouse_capture = false;
     state.compose(120, 60).unwrap();
-    assert!(state.hits.task_groups.is_empty());
+    assert!(state.hits.groups.is_empty());
     assert!(state.hits.workspaces.is_empty());
 }
 
 #[test]
-fn task_groups_collapsed_preferences_round_trip_locally_and_per_endpoint() {
-    let path = std::env::temp_dir().join(format!(
-        "herdr-task-group-prefs-{}.json",
-        std::process::id()
-    ));
+fn groups_collapsed_preferences_round_trip_locally_and_per_endpoint() {
+    let path = std::env::temp_dir().join(format!("herdr-group-prefs-{}.json", std::process::id()));
     let _ = std::fs::remove_file(&path);
     let profile = SavedSshEndpoint::new("Build", "dev@build.example", "agents").unwrap();
     let remote_id = ClientEndpointId::Ssh(profile.id.clone());
     let mut state = ClientShellState::new(
         ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone()),
     );
-    state.toggle_collapsed_group(&ClientEndpointId::Local, "task-group:a".into());
+    state.toggle_collapsed_group(&ClientEndpointId::Local, "group:a".into());
     state.toggle_collapsed_group(&ClientEndpointId::Local, "a".into());
-    state.toggle_collapsed_group(&remote_id, "task-group:b".into());
+    state.toggle_collapsed_group(&remote_id, "group:b".into());
     state.persist_chrome_preferences(&mut ClientShellInput::default());
     let restored = ClientShellState::new(
         ClientShellConfig::from_config(&Config::default()).with_preferences_path(path.clone()),
     );
-    assert!(restored.group_is_collapsed(&ClientEndpointId::Local, "task-group:a"));
+    assert!(restored.group_is_collapsed(&ClientEndpointId::Local, "group:a"));
     assert!(restored.group_is_collapsed(&ClientEndpointId::Local, "a"));
-    assert!(!restored.group_is_collapsed(&ClientEndpointId::Local, "task-group:b"));
-    assert!(restored.group_is_collapsed(&remote_id, "task-group:b"));
-    assert!(!restored.group_is_collapsed(&remote_id, "task-group:a"));
+    assert!(!restored.group_is_collapsed(&ClientEndpointId::Local, "group:b"));
+    assert!(restored.group_is_collapsed(&remote_id, "group:b"));
+    assert!(!restored.group_is_collapsed(&remote_id, "group:a"));
     std::fs::remove_file(path).expect("remove preference test file");
 }
 
@@ -617,7 +611,7 @@ fn scaling_snapshot(count: usize, grouped: bool) -> ClientShellSnapshot {
         pane.tab_id = tab.tab_id.clone();
         pane.focused = workspace.focused;
         if grouped {
-            snapshot.task_groups.push(group(
+            snapshot.groups.push(group(
                 &format!("g{index}"),
                 &format!("Task {index}"),
                 &[&workspace.workspace_id],
@@ -631,7 +625,7 @@ fn scaling_snapshot(count: usize, grouped: bool) -> ClientShellSnapshot {
 }
 
 #[test]
-fn task_groups_long_navigation_reveals_workspaces_after_header_rows() {
+fn groups_long_navigation_reveals_workspaces_after_header_rows() {
     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
     state.set_snapshot(Box::new(scaling_snapshot(25, true)));
     state.set_pane_surface(surface());
@@ -661,7 +655,7 @@ fn task_groups_long_navigation_reveals_workspaces_after_header_rows() {
 
 #[test]
 #[ignore = "supporting full-shell render scaling profile; run explicitly with --ignored --nocapture"]
-fn task_groups_render_scale_profile() {
+fn groups_render_scale_profile() {
     use std::{hint::black_box, time::Instant};
     const ITERATIONS: u32 = 1_000;
     for count in [1, 15] {
@@ -680,19 +674,19 @@ fn task_groups_render_scale_profile() {
             }
             let elapsed = start.elapsed() / ITERATIONS;
             eprintln!(
-                "task-group full-shell render: {count} workspaces/panes, grouped={grouped}, {elapsed:?}/frame"
+                "group full-shell render: {count} workspaces/panes, grouped={grouped}, {elapsed:?}/frame"
             );
             timings.push(elapsed);
         }
         eprintln!(
-            "task-group full-shell render: {count} workspaces/panes, grouped/baseline={:.3}",
+            "group full-shell render: {count} workspaces/panes, grouped/baseline={:.3}",
             timings[1].as_secs_f64() / timings[0].as_secs_f64()
         );
     }
 }
 
 #[test]
-fn task_groups_member_labels_use_repository_without_redundant_git_details() {
+fn groups_member_labels_use_repository_without_redundant_git_details() {
     use crate::ui::ResolvedTokenKind;
     let snapshot = task_snapshot();
     let mut workspace = snapshot.workspaces[1].clone();
@@ -727,7 +721,7 @@ fn task_groups_member_labels_use_repository_without_redundant_git_details() {
             ResolvedTokenKind::Workspace(label) if label == "bots/taskA")));
     }
     // Ungrouped custom names and linked-worktree branch labels keep existing behavior.
-    entry.task_group = false;
+    entry.group = false;
     for (custom, expected) in [(true, "bots/taskA"), (false, "taskA")] {
         workspace.custom_label = custom;
         let rows = sidebar::workspace_rows(&workspace, AgentStatus::Idle, &entry, &config);

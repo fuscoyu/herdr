@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 mod agent_view;
 mod agents;
 mod env;
+mod groups;
 mod integrations;
 mod layouts;
 mod panes;
@@ -10,7 +11,6 @@ pub(crate) mod plugins;
 pub(super) mod responses;
 mod session;
 mod tabs;
-mod task_groups;
 mod workspaces;
 mod worktrees;
 
@@ -1060,18 +1060,18 @@ impl App {
                 );
             }
             Method::SessionSnapshot(_) => return self.handle_session_snapshot(request.id),
-            Method::TaskGroupList(_) => return self.handle_task_group_list(request.id),
-            Method::TaskGroupCreate(params) => {
-                return self.handle_task_group_create(request.id, params);
+            Method::GroupList(_) => return self.handle_group_list(request.id),
+            Method::GroupCreate(params) => {
+                return self.handle_group_create(request.id, params);
             }
-            Method::TaskGroupRename(params) => {
-                return self.handle_task_group_rename(request.id, params);
+            Method::GroupRename(params) => {
+                return self.handle_group_rename(request.id, params);
             }
-            Method::TaskGroupDelete(params) => {
-                return self.handle_task_group_delete(request.id, params);
+            Method::GroupDelete(params) => {
+                return self.handle_group_delete(request.id, params);
             }
-            Method::TaskGroupAssign(params) => {
-                return self.handle_task_group_assign(request.id, params);
+            Method::GroupAssign(params) => {
+                return self.handle_group_assign(request.id, params);
             }
             Method::WorkspaceList(_) => return self.handle_workspace_list(request.id),
             Method::WorkspaceGet(target) => return self.handle_workspace_get(request.id, target),
